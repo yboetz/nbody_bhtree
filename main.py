@@ -9,7 +9,7 @@ import numpy as np
 import pyqtgraph.opengl as gl
 from pyqtgraph.Qt import QtCore, QtGui
 import pyqtgraph as pg
-import QuadTree
+from Quadtree import QTree
 from time import time
 
 # Main class to display window
@@ -41,7 +41,7 @@ class Window(gl.GLViewWidget):
         self.read('Data/Galaxy_2304')
         self.size = .1
         
-        self.quad = QuadTree.QuadTree(self.pos, self.n, self.center, self.theta)
+        self.quad = QTree(self.pos, self.n, self.center, self.theta)
 
         # Add scatterplot with data
         self.sp = gl.GLScatterPlotItem(pos=self.pos.reshape((self.n, 4))[:,:3], size = self.size,
@@ -51,15 +51,10 @@ class Window(gl.GLViewWidget):
         # Start timer which calls update function at const framerate
         self.t = QtCore.QTimer()
         self.t.timeout.connect(self.updateData)
-        
-#    def integrate(self):
-##        st = time()
-#        self.quad.integrateNSteps(self.pos, self.vel, self.dt, self.eps2, 1)
-##        print(time() - st)
-    
+           
     # Integrates one step forward and sets data new    
     def updateData(self):
-        self.quad.integrateNSteps(self.pos, self.vel, self.dt, self.eps2, 1)
+        self.quad.integrateNSteps(self.pos, self.vel, self.dt, self.eps2, 5)
         self.sp.setData(pos=self.pos.reshape((self.n, 4))[:,:3], size = self.size, color = [1,1,1,1])
     
     # Calculates centre of momentum
