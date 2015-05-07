@@ -9,7 +9,7 @@ import numpy as np
 import pyqtgraph.opengl as gl
 from pyqtgraph.Qt import QtCore, QtGui
 import pyqtgraph as pg
-from Quadtree import QTree
+from Octree import OTree
 from time import time
 
 # Main class to display window
@@ -38,11 +38,10 @@ class Window(gl.GLViewWidget):
         self.addItem(grid)
                 
         # Initialize position and velocity vectors and fill with random data
-        self.read('Data/Galaxy_2304')
+        self.read('Data/GalaxyMerger_4096')
         self.size = .1
-        
-        self.quad = QTree(self.pos, self.n, self.center, self.theta)
 
+        self.oct = OTree(self.pos, self.n, self.center, self.theta)
         # Add scatterplot with data
         self.sp = gl.GLScatterPlotItem(pos=self.pos.reshape((self.n, 4))[:,:3], size = self.size,
                                        color = [1,1,1,1], pxMode=False)
@@ -54,7 +53,9 @@ class Window(gl.GLViewWidget):
            
     # Integrates one step forward and sets data new    
     def updateData(self):
-        self.quad.integrateNSteps(self.pos, self.vel, self.dt, self.eps2, 5)
+#        st = time()
+        self.oct.integrateNSteps(self.pos, self.vel, self.dt, self.eps2, 1)
+#        print(time() - st)
         self.sp.setData(pos=self.pos.reshape((self.n, 4))[:,:3], size = self.size, color = [1,1,1,1])
     
     # Calculates centre of momentum
@@ -86,8 +87,6 @@ class Window(gl.GLViewWidget):
                 pos[i,3] = x[0]
                 vel[i,0:3] = x[4:7]
             vel[:,3] = 0
-            vel[:,2] = 0
-            pos[:,2] = 0
             self.pos = pos.reshape(4*n)
             self.vel = vel.reshape(4*n)
             self.n = n
