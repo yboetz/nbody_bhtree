@@ -119,11 +119,12 @@ void Cell::insert(float* p, int n, Leaf** leavesptr)
     if(subp[i] == NULL)                                         // If child does not exist, create leaf and insert body into leaf.
         {
         float _midp[3];
-        _midp[0] = midp[0] + quadIdx[i][0] * side / 4.0f;
-        _midp[1] = midp[1] + quadIdx[i][1] * side / 4.0f;
-        _midp[2] = midp[2] + quadIdx[i][2] * side / 4.0f;
+        float _side = side / 4.0f;
+        _midp[0] = midp[0] + quadIdx[i][0] * _side;
+        _midp[1] = midp[1] + quadIdx[i][1] * _side;
+        _midp[2] = midp[2] + quadIdx[i][2] * _side;
         
-        Leaf* _leaf = new Leaf (_midp, side / 2.0f);            // create new leaf
+        Leaf* _leaf = new Leaf (_midp, 2.0f * _side);            // create new leaf
         subp[i] = (Node*)_leaf;                                 // append ptr to leaf in list subp
         leavesptr[n] = _leaf;                                   // Append ptr to leaf to a global list of all leaves  
                 
@@ -148,10 +149,11 @@ void Cell::insert(float* p, int n, Leaf** leavesptr)
         _cell->subp[_i] = (Node*)_leaf;
         
         // Set parameters of leaf
-        _leaf->midp[0] += quadIdx[_i][0] * (_cell->side) / 4.0f;
-        _leaf->midp[1] += quadIdx[_i][1] * (_cell->side) / 4.0f;
-        _leaf->midp[2] += quadIdx[_i][2] * (_cell->side) / 4.0f;
-        _leaf->side = (_cell->side) / 2.0f;
+        float _side = (_cell->side) / 4.0f;
+        _leaf->midp[0] += quadIdx[_i][0] * _side;
+        _leaf->midp[1] += quadIdx[_i][1] * _side;
+        _leaf->midp[2] += quadIdx[_i][2] * _side;
+        _leaf->side = 2.0f * _side;
         
         _cell->insert(p, n, leavesptr);
         
@@ -210,7 +212,9 @@ Octree::Octree(float* pos, int n, float* center, float th)
     N = n;
     theta2 = th;
     leaves = new Leaf*[N];
-    cent[0] = center[0]; cent[1] = center[1]; cent[2] = center[2];
+    cent[0] = center[0];
+    cent[1] = center[1];
+    cent[2] = center[2];
     buildTree(pos);  
     }
 // Recursively deletes every node and delete leaves
@@ -275,9 +279,10 @@ void Octree::leafAccel(Cell* node, Leaf* leaf, float* a, float eps2)
     a[1] += _a[1];
     a[2] += _a[2];
     }
-// Finds acceleration for every leaf and updates pos & vel
+// Finds acceleration for every leaf and updates pos & vel via implizit euler integration
 void Octree::integrate(float* pos, float* vel, float dt, float eps2)
     {
+    #pragma omp parallel for schedule(dynamic,100)
     for(int i = 0; i < N; i++)
         {
         int idx = 4*i;

@@ -68,8 +68,7 @@ class NBodyWidget(gl.GLViewWidget):
         self.center = np.array([0,0,0], dtype = np.float32)
         # Opening angle
         self.theta = np.float32(.25)
-        
-               
+            
         # Create GridItems
         self.gx = gl.GLGridItem()
         self.gx.rotate(90, 0, 1, 0)
