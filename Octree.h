@@ -17,7 +17,6 @@ void accel(float* p1, float* p2, float* a, float m2, float eps2)
     a[1] *= f;
     a[2] *= f;
     }
-
 // Calculates potential between p1 and p2
 float pot(float* p1, float* p2, float m1, float m2)
     {
@@ -31,7 +30,6 @@ float pot(float* p1, float* p2, float m1, float m2)
     
     return f;
     }
-
 // Returns squared distance between p1 & p2
 float dist(float* p1, float* p2)
     {
@@ -283,9 +281,9 @@ float Octree::leafPot(Cell* node, Leaf* leaf)
     {
     if(node == (Cell*)leaf) return 0.0f;
     
-    float _p = 0;
+    float p = 0;
     if((node->type) || (pow((node->side),2) / dist(node->com, leaf->com) < theta2))
-        _p = pot(leaf->com, node->com, leaf->m, node->m);
+        return pot(leaf->com, node->com, leaf->m, node->m);
     else
         {
         for(int i = 0; i < 8; i++)
@@ -293,11 +291,11 @@ float Octree::leafPot(Cell* node, Leaf* leaf)
             Cell* ptr = (Cell*)(node->subp[i]);
             if(ptr != NULL)
                 {
-                _p += leafPot(ptr, leaf);
+                p += leafPot(ptr, leaf);
                 }
             }
         }
-    return _p;
+    return p;
     }
 // Calculates energy of system
 float Octree::energy()
@@ -311,9 +309,7 @@ float Octree::energy()
         int idx = 4*i;
         V += leafPot((Cell*)root, leaves[i]);
         
-        float _T = vel[idx]*vel[idx] + vel[idx+1]*vel[idx+1] + vel[idx+2]*vel[idx+2];
-        _T *= leaves[i]->m;
-        T += _T;       
+        T += (leaves[i]->m) * (vel[idx]*vel[idx] + vel[idx+1]*vel[idx+1] + vel[idx+2]*vel[idx+2]);    
         }
     
     return 0.5f * (T - V);
