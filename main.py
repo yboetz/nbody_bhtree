@@ -7,7 +7,6 @@ Created on Mon Apr 13 09:38:23 2015
 
 import numpy as np
 from Octree import OTree
-import pyopencl as cl
 import pyqtgraph.opengl as gl
 from pyqtgraph.Qt import QtCore, QtGui
 import pyqtgraph as pg
@@ -82,7 +81,7 @@ class NBodyWidget(gl.GLViewWidget):
         # Initial read in of positions and velocity from file
         self.read('Data/Plummer_4096')
         # Initialize Octree
-        self.oct = OTree(self.pos, self.n, self.center, self.theta)
+        self.oct = OTree(self.pos, self.vel, self.n, self.center, self.theta)
         
         # Create variable for GLLinePlotItem
         self.lp = None
@@ -104,75 +103,15 @@ class NBodyWidget(gl.GLViewWidget):
         # Timer which calls update function at const framerate
         self.timer = QtCore.QTimer()
         self.timer.timeout.connect(self.updateScatterPlot)
-        
-        # Create context
-        self.createContext()
-        
+               
         # Init fps counter
         self.fps = 1000 / self.tickRate
         self.timer.timeout.connect(self.fpsCounter)
-                        
-    # Create context for GPU if available, CPU if not. OpenCl atm only needed to calculate energy
-    def createContext(self):
-        # Search for devices
-        try:    
-            platforms = cl.get_platforms()
-            if len(platforms) == 0:
-                raise cl.RuntimeError('No OpenCl platform found. Exit program.')
-        except cl.RuntimeError as error:
-            print(error)
-            pg.exit()
-        try:
-            self.devs = []
-            gpus, cpuIntel, cpuAMD, cpuOther = [], [], [], []
-            for platform in platforms:
-                gpus += platform.get_devices(device_type=cl.device_type.GPU)
-                
-                if platform.get_info(cl.platform_info.NAME) == 'Intel(R) OpenCL':
-                    cpuIntel += platform.get_devices(device_type=cl.device_type.CPU)
-                elif platform.get_info(cl.platform_info.NAME) ==  'AMD Accelerated Parallel Processing':
-                    cpuAMD += platform.get_devices(device_type=cl.device_type.CPU)
-                else:
-                    cpuOther += platform.get_devices(device_type=cl.device_type.CPU)
-
-            if len(gpus) > 0:
-                self.devs = gpus
-            elif len(cpuIntel) > 0:
-                self.devs = cpuIntel
-            elif len(cpuAMD) > 0:
-                self.devs = cpuAMD
-            else:
-                self.devs = cpuOther
-#            for device in self.devs:
-#                print("Platform: %s\nDevice: %s\n" %(device.get_info(cl.device_info.PLATFORM),
-#                                                     device.get_info(cl.device_info.NAME)))
-        except cl.RuntimeError as error:
-            print(error)
-            pg.exit()
-        
-        # Create context for found device
-        self.ctx = cl.Context(devices = self.devs)
-        self.queue = cl.CommandQueue(self.ctx)
-        self.localSize = self.setLocalSize()
-        # Read in kernel code
-        with open('KernelEnergy.cl', 'r') as file:
-            code = file.read()
-        # Build program
-        self.prg = cl.Program(self.ctx,code).build()
-
-    # Set optimal local work group size
-    def setLocalSize(self):
-        size = min(self.devs[0].get_info(cl.device_info.MAX_WORK_GROUP_SIZE), 
-                   self.devs[0].get_info(cl.device_info.LOCAL_MEM_SIZE)//32)
-        # Until global size is evenly divisible by local size, reduce local size by 2
-        while self.n % size != 0:
-            size = size // 2
-        return (size,1)
-               
+                                              
     # Calls integrate fucntion and updates data
     def updateScatterPlot(self):
 #        st = time()
-        self.oct.integrateNSteps(self.pos, self.vel, self.dt, self.e, self.burst)
+        self.oct.integrateNSteps(self.dt, self.e, self.burst)
 #        print(time() - st)
         self.sp.setData(pos=self.pos.reshape((self.n,4))[:,0:3], 
                         size = self.sizeArray, color = self.colors)
@@ -359,11 +298,10 @@ class NBodyWidget(gl.GLViewWidget):
         try:
             del self.oct
             self.read(path)
-            self.oct = OTree(self.pos, self.n, self.center, self.theta)
+            self.oct = OTree(self.pos, self.vel, self.n, self.center, self.theta)
             self.delLinePlot()
             self.resetColors()
             self.setSize(self.size)
-            self.localSize = self.setLocalSize()
             self.resetCenter()
         except FileNotFoundError as error:
             print(error)
@@ -383,24 +321,7 @@ class NBodyWidget(gl.GLViewWidget):
         tmp = np.sum(self.pos.reshape((self.n,4))[:,0:3] * masses[:, None], axis = 0)
         M = np.sum(masses)
         return tmp / M
-    
-    # Calculates total energy of the system
-    def energy(self):
-        E = np.zeros(self.n, dtype = np.float32)
-        mf = cl.mem_flags
-        # Create memory on device
-        pos_cl = cl.Buffer(self.ctx, mf.READ_WRITE | mf.COPY_HOST_PTR, hostbuf=self.pos)
-        vel_cl= cl.Buffer(self.ctx, mf.READ_WRITE | mf.COPY_HOST_PTR, hostbuf=self.vel)
-        block_cl = cl.LocalMemory(16 * self.localSize[0])
-        E_cl = cl.Buffer(self.ctx, mf.WRITE_ONLY, self.pos.nbytes // 4)
-        # Enqueue kernel
-        self.prg.energy(self.queue, (self.n,1), self.localSize, pos_cl, vel_cl, 
-                        E_cl, block_cl)
-        # Copy data back to host
-        cl.enqueue_copy(self.queue, E, E_cl).wait()
-
-        return np.sum(E)
-    
+        
     # Calculates total angular momentum of the system
     def angularMomentum(self):
         masses = self.pos[3::4]
@@ -465,7 +386,7 @@ class NBodyWidget(gl.GLViewWidget):
     # Makes a test, calculates energy and momentum drift after some steps
     def testFunction(self, path, dt, t):
         self.readFile(path)
-        E0, J0 = self.energy(), self.angularMomentum()
+        E0, J0 = self.oct.energy(), self.angularMomentum()
         burst = self.burst
         dt0 = self.dt
         self.dt = np.float32(dt)
@@ -474,10 +395,10 @@ class NBodyWidget(gl.GLViewWidget):
         print('Testing: ', end="")
         T = time()   
         while time() - T < t:
-            self.integrate()
+            self.oct.integrateNSteps(self.dt, self.e, self.burst)
             num += 100
         T = time() - T    
-        E1, J1 = self.energy(), self.angularMomentum()
+        E1, J1 = self.oct.energy(), self.angularMomentum()
         dE, dJ = E1 - E0, J1 - J0
         print('Did %i cycles in %.2f seconds.' %(num, T))
         print('E0 =  %.2f, E1 = %.2f\nJ0 = %.2f, J1 = %.2f' %(E0,E1,J0,J1))
@@ -616,7 +537,7 @@ class MainWindow(QtGui.QMainWindow):
         elif e.key() == QtCore.Qt.Key_R:
             self.window.GLWidget.resetCenter()
         elif e.key() == QtCore.Qt.Key_E:
-            print('E = %.3f, J = %.3f' %(self.window.GLWidget.energy(), 
+            print('E = %.3f, J = %.3f' %(self.window.GLWidget.oct.energy(), 
                                          self.window.GLWidget.angularMomentum()))
         elif e.key() == QtCore.Qt.Key_T:
             if self.window.GLWidget.timer.isActive():

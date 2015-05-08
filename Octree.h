@@ -18,6 +18,20 @@ void accel(float* p1, float* p2, float* a, float m2, float eps2)
     a[2] *= f;
     }
 
+// Calculates potential between p1 and p2
+float pot(float* p1, float* p2, float m1, float m2)
+    {
+    float d[3];
+    d[0] = p2[0] - p1[0];
+    d[1] = p2[1] - p1[1];
+    d[2] = p2[2] - p1[2];
+       
+    float f = d[0]*d[0] + d[1]*d[1] + d[2]*d[2];
+    f = m1 * m2 / sqrt(f);
+    
+    return f;
+    }
+
 // Returns squared distance between p1 & p2
 float dist(float* p1, float* p2)
     {
@@ -186,17 +200,21 @@ class Octree
         Node* root;
         Leaf** leaves;
         int N;
+        float* pos;
+        float* vel;
         float theta2;
         float cent[3];
 
-        void buildTree(float*);
-        float getBoxSize(float*);
-        Octree(float*, int, float*, float);
+        Octree(float*, float*, int, float*, float);
         ~Octree();
+        void buildTree();
+        float getBoxSize();
         void delTree(Node*);                    // helper function for deconstructor
+        float leafPot(Cell*, Leaf*);
+        float energy();
         void leafAccel(Cell*, Leaf*, float*, float);
-        void integrate(float*, float*, float, float);
-        void integrateNSteps(float*, float*, float, float, int);
+        void integrate(float, float);
+        void integrateNSteps(float, float, int);
         void traverse();
 
     };
@@ -207,15 +225,17 @@ void Octree::traverse()
     }
 
 // Constructor. Sets number of bodies, opening angle, center, creates list with leaves & builds first tree
-Octree::Octree(float* pos, int n, float* center, float th)
+Octree::Octree(float* p, float* v, int n, float* center, float th)
     {
+    pos = p; 
+    vel = v;
     N = n;
     theta2 = th;
     leaves = new Leaf*[N];
     cent[0] = center[0];
     cent[1] = center[1];
     cent[2] = center[2];
-    buildTree(pos);  
+    buildTree();  
     }
 // Recursively deletes every node and delete leaves
 Octree::~Octree()
@@ -238,7 +258,7 @@ void Octree::delTree(Node* node)
     delete (Cell*)node;
     }
 // Finds boxsize around particles
-float Octree::getBoxSize(float* pos)
+float Octree::getBoxSize()
     {
     float res;
     float* _pos = new float[3*N];
@@ -253,10 +273,50 @@ float Octree::getBoxSize(float* pos)
     return res;
     }
 // Creates new root cell and fills it with bodies
-void Octree::buildTree(float* p)
+void Octree::buildTree()
     {
-    root = new Cell (cent, getBoxSize(p));  
-    ((Cell*)root)->insertMultiple(p, N, leaves);
+    root = new Cell (cent, getBoxSize());  
+    ((Cell*)root)->insertMultiple(pos, N, leaves);
+    }
+// Traverses tree and calculates potential for a leaf
+float Octree::leafPot(Cell* node, Leaf* leaf)
+    {
+    if(node == (Cell*)leaf) return 0.0f;
+    
+    float _p = 0;
+    if((node->type) || (pow((node->side),2) / dist(node->com, leaf->com) < theta2))
+        _p = pot(leaf->com, node->com, leaf->m, node->m);
+    else
+        {
+        for(int i = 0; i < 8; i++)
+            {
+            Cell* ptr = (Cell*)(node->subp[i]);
+            if(ptr != NULL)
+                {
+                _p += leafPot(ptr, leaf);
+                }
+            }
+        }
+    return _p;
+    }
+// Calculates energy of system
+float Octree::energy()
+    {
+    float V = 0;
+    float T = 0;
+    
+    #pragma omp parallel for schedule(dynamic,100)
+    for(int i = 0; i < N; i++)
+        {
+        int idx = 4*i;
+        V += leafPot((Cell*)root, leaves[i]);
+        
+        float _T = vel[idx]*vel[idx] + vel[idx+1]*vel[idx+1] + vel[idx+2]*vel[idx+2];
+        _T *= leaves[i]->m;
+        T += _T;       
+        }
+    
+    return 0.5f * (T - V);
     }
 // Traverses tree and calculates acceleration for a leaf
 void Octree::leafAccel(Cell* node, Leaf* leaf, float* a, float eps2)
@@ -280,7 +340,7 @@ void Octree::leafAccel(Cell* node, Leaf* leaf, float* a, float eps2)
     a[2] += _a[2];
     }
 // Finds acceleration for every leaf and updates pos & vel via implizit euler integration
-void Octree::integrate(float* pos, float* vel, float dt, float eps2)
+void Octree::integrate(float dt, float eps2)
     {
     #pragma omp parallel for schedule(dynamic,100)
     for(int i = 0; i < N; i++)
@@ -298,14 +358,14 @@ void Octree::integrate(float* pos, float* vel, float dt, float eps2)
         pos[idx+2] += dt * vel[idx+2];
         }
     delTree(root);
-    buildTree(pos);
+    buildTree();
     }
 // Calls integration function a number of times
-void Octree::integrateNSteps(float* pos, float* vel, float dt, float eps2, int n)
+void Octree::integrateNSteps(float dt, float eps2, int n)
     {
     for(int i = 0; i < n; i++)
         {
-        integrate(pos, vel, dt, eps2);
+        integrate(dt, eps2);
         }
     }
 
