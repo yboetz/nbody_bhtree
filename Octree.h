@@ -33,7 +33,7 @@ float dist(float* p1, float* p2)
 class Node
     {  
     public:
-        static float quadIdx[8][3];
+        static float octIdx[8][3];
         
         bool type;                                          // Type of node: Leaf == 1, Cell == 0
         float side, m;
@@ -45,7 +45,7 @@ class Node
         short whichOct(float*);      
     };
     
-float Node::quadIdx[8][3] = {{-1,-1,-1},{1,-1,-1},{-1,1,-1},{1,1,-1},{-1,-1,1},{1,-1,1},{-1,1,1},{1,1,1}};
+float Node::octIdx[8][3] = {{-1,-1,-1},{1,-1,-1},{-1,1,-1},{1,1,-1},{-1,-1,1},{1,-1,1},{-1,1,1},{1,1,1}};
 
 // Node constructor. Sets midpoint and side length
 Node::Node(float* mp, float s)
@@ -65,10 +65,10 @@ bool Node::contains(float* p)
     d[2] = (midp)[2] - p[2];
     float hside = side / 2.0f;
     
-    if(abs(d[0]) < hside && abs(d[1]) < hside && abs(d[2]) < hside) return 1;
+    if(fabs(d[0]) < hside && fabs(d[1]) < hside && fabs(d[2]) < hside) return 1;
     else return 0;
     }
-// Returns integer value of subquadrant of position p
+// Returns integer value of suboctant of position p
 short Node::whichOct(float* p)
     {
     short res = 0;
@@ -120,12 +120,12 @@ void Cell::insert(float* p, int n, Leaf** leavesptr)
         {
         float _midp[3];
         float _side = side / 4.0f;
-        _midp[0] = midp[0] + quadIdx[i][0] * _side;
-        _midp[1] = midp[1] + quadIdx[i][1] * _side;
-        _midp[2] = midp[2] + quadIdx[i][2] * _side;
+        _midp[0] = midp[0] + octIdx[i][0] * _side;
+        _midp[1] = midp[1] + octIdx[i][1] * _side;
+        _midp[2] = midp[2] + octIdx[i][2] * _side;
         
-        Leaf* _leaf = new Leaf (_midp, 2.0f * _side);            // create new leaf
-        subp[i] = (Node*)_leaf;                                 // append ptr to leaf in list subp
+        Leaf* _leaf = new Leaf (_midp, 2.0f * _side);           // create new leaf
+        subp[i] = (Node*)_leaf;                                 // append ptr to leaf in list of subpointers
         leavesptr[n] = _leaf;                                   // Append ptr to leaf to a global list of all leaves  
                 
         _leaf->m = p[3];                                        // Put pos and m into leaf
@@ -145,14 +145,14 @@ void Cell::insert(float* p, int n, Leaf** leavesptr)
         _cell->com[1] = _leaf->com[1];
         _cell->com[2] = _leaf->com[2];
         
-        short _i = _cell->whichOct(_leaf->com);                // Calculates subQuad of original leaf
+        short _i = _cell->whichOct(_leaf->com);                // Calculates suboctand of original leaf
         _cell->subp[_i] = (Node*)_leaf;
         
         // Set parameters of leaf
         float _side = (_cell->side) / 4.0f;
-        _leaf->midp[0] += quadIdx[_i][0] * _side;
-        _leaf->midp[1] += quadIdx[_i][1] * _side;
-        _leaf->midp[2] += quadIdx[_i][2] * _side;
+        _leaf->midp[0] += octIdx[_i][0] * _side;
+        _leaf->midp[1] += octIdx[_i][1] * _side;
+        _leaf->midp[2] += octIdx[_i][2] * _side;
         _leaf->side = 2.0f * _side;
         
         _cell->insert(p, n, leavesptr);
@@ -248,7 +248,7 @@ float Octree::getBoxSize(float* pos)
         _pos[3*i+1] = fabs(pos[4*i+1]);
         _pos[3*i+2] = fabs(pos[4*i+2]);
         };
-    res = 2 * (*std::max_element(_pos, _pos + 3*N) + 0.0625f);
+    res = 2 * (*std::max_element(_pos, _pos + 3*N));
     delete[] _pos;
     return res;
     }

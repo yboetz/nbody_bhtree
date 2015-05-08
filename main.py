@@ -14,10 +14,10 @@ import pyqtgraph as pg
 from time import time
 #import os
 #os.environ['PYOPENCL_COMPILER_OUTPUT'] = '1'
-from numba import jit, void, int32, float32
+from numba import jit, void, i4, f4
 
 # Function to roll the array self.lineColors by 1.
-@jit(void(float32[:,:,:], int32, int32), nopython = True)
+@jit(void(f4[:,:,:], i4, i4), nopython = True)
 def rollLineColor(a, x, y):
     """Only use to roll the array self.lineColors. This function is faster than np.roll, 
     but can only be used in this special case. Will segfault if the shape is not
