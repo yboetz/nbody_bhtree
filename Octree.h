@@ -307,9 +307,11 @@ float Octree::energy()
     for(int i = 0; i < N; i++)
         {
         int idx = 4*i;
+        #pragma omp atomic
         V += leafPot((Cell*)root, leaves[i]);
         
-        T += (leaves[i]->m) * (vel[idx]*vel[idx] + vel[idx+1]*vel[idx+1] + vel[idx+2]*vel[idx+2]);    
+        #pragma omp atomic
+        T += (leaves[i]->m) * (vel[idx]*vel[idx] + vel[idx+1]*vel[idx+1] + vel[idx+2]*vel[idx+2]);
         }
     
     return 0.5f * (T - V);
