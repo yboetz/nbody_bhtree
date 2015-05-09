@@ -375,32 +375,33 @@ class NBodyWidget(gl.GLViewWidget):
             super(NBodyWidget, self).mouseMoveEvent(ev)
     
     # Makes a test, calculates energy and momentum drift after some steps
-    def testFunction(self, path, dt, t):
-        self.readFile(path)
-        E0, J0 = self.oct.energy(), self.angularMomentum()
-        burst = self.burst
-        dt0 = self.dt
-        self.dt = np.float32(dt)
-        num = 0
-        self.burst = 100
+    def testFunction(self, dt, t):              
         print('Testing: ', end="")
+        num = 0
         T = time()   
-        while time() - T < t:
-            self.oct.integrateNSteps(self.dt, self.e, self.burst)
-            num += 100
-        T = time() - T    
-        E1, J1 = self.oct.energy(), self.angularMomentum()
+        while time() - T < 2:
+            self.oct.integrateNSteps(np.float32(dt), self.e, 10)
+            num += 10;
+        T = time() - T
+        
+        num = int(num / T * 10)
+        num = num + 200 - num  % 200
+        E0, J0 = self.oct.energy(), self.oct.angularMomentum()
+
+        T = time()
+        self.oct.integrateNSteps(np.float32(dt), self.e, num)
+        T = time() - T
+
+        E1, J1 = self.oct.energy(), self.oct.angularMomentum()
         dE, dJ = E1 - E0, J1 - J0
         print('Did %i cycles in %.2f seconds.' %(num, T))
         print('E0 =  %.2f, E1 = %.2f\nJ0 = %.2f, J1 = %.2f' %(E0,E1,J0,J1))
         print('dE = %.2f = %.2f E0\ndJ = %.2f = %.2f J0\n'
               %(dE, dE / E0, dJ, dJ / J0))        
-        self.burst = burst
-        self.dt = dt0
     
     # Calls testFunction in separate thread
-    def test(self, path, dt, t):
-        self.worker = WorkerThread(self.testFunction, path, dt, t)
+    def test(self, dt, t):
+        self.worker = WorkerThread(self.testFunction, dt, t)
         self.worker.start()
     
 
@@ -533,8 +534,7 @@ class MainWindow(QtGui.QMainWindow):
         elif e.key() == QtCore.Qt.Key_T:
             if self.window.GLWidget.timer.isActive():
                 self.window.GLWidget.timer.stop()
-            path = QtGui.QFileDialog.getOpenFileName(self, 'Open file','Data/')
-            self.window.GLWidget.test(path, 0.01, 10)
+            self.window.GLWidget.test(0.01, 10)
 
 if __name__ == "__main__":
     # Start Qt applicatoin

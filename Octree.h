@@ -371,7 +371,7 @@ void Octree::leafAccel(Cell* node, Leaf* leaf, float* a, float eps2)
     a[1] += _a[1];
     a[2] += _a[2];
     }
-// Finds acceleration for every leaf and updates pos & vel via implizit euler integration
+// Finds acceleration for every leaf and updates pos & vel via semi-implizit Euler integration
 void Octree::integrate(float dt, float eps2)
     {
     #pragma omp parallel for schedule(dynamic,100)
