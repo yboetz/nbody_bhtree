@@ -296,8 +296,8 @@ class NBodyWidget(gl.GLViewWidget):
         if self.timer.isActive():
             self.timer.stop()
         try:
-            del self.oct
             self.read(path)
+            del self.oct
             self.oct = OTree(self.pos, self.vel, self.n, self.center, self.theta)
             self.delLinePlot()
             self.resetColors()
