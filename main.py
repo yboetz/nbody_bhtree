@@ -321,16 +321,7 @@ class NBodyWidget(gl.GLViewWidget):
         tmp = np.sum(self.pos.reshape((self.n,4))[:,0:3] * masses[:, None], axis = 0)
         M = np.sum(masses)
         return tmp / M
-        
-    # Calculates total angular momentum of the system
-    def angularMomentum(self):
-        masses = self.pos[3::4]
-        pos = self.pos.reshape((self.n,4))[:,0:3]
-        imp = self.vel.reshape((self.n,4))[:,0:3] * masses[:, None]
-        J = np.cross(pos, imp)
-        J = np.sqrt(np.sum(J*J, axis = 1))
-        return np.sum(J)
-      
+              
     # Calculates current fps
     def fpsCounter(self):
         self.now = time()
@@ -538,7 +529,7 @@ class MainWindow(QtGui.QMainWindow):
             self.window.GLWidget.resetCenter()
         elif e.key() == QtCore.Qt.Key_E:
             print('E = %.3f, J = %.3f' %(self.window.GLWidget.oct.energy(), 
-                                         self.window.GLWidget.angularMomentum()))
+                                         self.window.GLWidget.oct.angularMomentum()))
         elif e.key() == QtCore.Qt.Key_T:
             if self.window.GLWidget.timer.isActive():
                 self.window.GLWidget.timer.stop()

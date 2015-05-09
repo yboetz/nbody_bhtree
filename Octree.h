@@ -2,6 +2,13 @@
 #include <algorithm>
 
 
+// Calculates cross product of vectors a & b and stores it in c
+void cross(float* a, float* b, float* c)
+    {
+    c[0] = a[1]*b[2] - a[2]*b[1];
+    c[1] = a[2]*b[0] - a[0]*b[2];
+    c[2] = a[0]*b[1] - a[1]*b[0];
+    }
 // Calculates acceleration between p1 and p2 and stores it in a
 void accel(float* p1, float* p2, float* a, float m2, float eps2)
     {
@@ -210,6 +217,7 @@ class Octree
         void delTree(Node*);                    // helper function for deconstructor
         float leafPot(Cell*, Leaf*);
         float energy();
+        float angularMomentum();
         void leafAccel(Cell*, Leaf*, float*, float);
         void integrate(float, float);
         void integrateNSteps(float, float, int);
@@ -297,7 +305,7 @@ float Octree::leafPot(Cell* node, Leaf* leaf)
         }
     return p;
     }
-// Calculates energy of system
+// Calculates energy of system (approximate)
 float Octree::energy()
     {
     float V = 0;
@@ -315,6 +323,32 @@ float Octree::energy()
         }
     
     return 0.5f * (T - V);
+    }
+// Calculates angular momentum of system (exact)
+float Octree::angularMomentum()
+    {
+    float J = 0;
+    
+    for(int i = 0; i < N; i++)
+        {
+        int idx = 4*i;
+        float p[3], v[3], c[3];
+        float m = pos[idx + 3];
+
+        p[0] = pos[idx];
+        p[1] = pos[idx + 1];
+        p[2] = pos[idx + 2];
+
+        v[0] = m*vel[idx];
+        v[1] = m*vel[idx + 1];
+        v[2] = m*vel[idx + 2];
+
+        cross(p,v,c);
+
+        J += sqrt(c[0]*c[0] + c[1]*c[1] + c[2]*c[2]);        
+        }
+        
+    return J;
     }
 // Traverses tree and calculates acceleration for a leaf
 void Octree::leafAccel(Cell* node, Leaf* leaf, float* a, float eps2)
