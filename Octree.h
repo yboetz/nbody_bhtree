@@ -4,12 +4,14 @@
 #include <immintrin.h>
 
 
-// Calculates cross product of vectors a & b and stores it in c
-void cross(float* a, float* b, float* c)
+// Calculates cross product of vectors a & b
+__m128 cross(__m128 a, __m128 b)
     {
-    c[0] = a[1]*b[2] - a[2]*b[1];
-    c[1] = a[2]*b[0] - a[0]*b[2];
-    c[2] = a[0]*b[1] - a[1]*b[0];
+    __m128 res = _mm_sub_ps(
+                            _mm_mul_ps(a, _mm_shuffle_ps(b, b, _MM_SHUFFLE(3, 0, 2, 1))),
+                            _mm_mul_ps(b, _mm_shuffle_ps(a, a, _MM_SHUFFLE(3, 0, 2, 1)))
+                            );
+    return _mm_shuffle_ps(res, res, _MM_SHUFFLE(3, 0, 2, 1 ));
     }
 // Calculates acceleration between p1 and p2
 __m128 accel(__m128 p1, __m128 p2, float eps2)
@@ -327,26 +329,20 @@ float Octree::energy()
     }
 // Calculates angular momentum of system (exact)
 float Octree::angularMomentum()
-    {   
+    {
     float J = 0;
     
     for(int i = 0; i < N; i++)
         {
         int idx = 4*i;
-        float p[3], v[3], c[3];
-        float m = pos[idx + 3];
+        
+        __m128 p = _mm_load_ps(pos + idx);
+        __m128 v = _mm_mul_ps(_mm_set1_ps(p[3]), _mm_load_ps(vel + idx));
+        
+        __m128 c = cross(p, v);    
+        c = _mm_mul_ps(c, c);
 
-        p[0] = pos[idx];
-        p[1] = pos[idx + 1];
-        p[2] = pos[idx + 2];
-
-        v[0] = m*vel[idx];
-        v[1] = m*vel[idx + 1];
-        v[2] = m*vel[idx + 2];
-
-        cross(p,v,c);
-
-        J += sqrt(c[0]*c[0] + c[1]*c[1] + c[2]*c[2]);        
+        J += sqrt(c[0] + c[1] + c[2]);        
         }
         
     return J;
