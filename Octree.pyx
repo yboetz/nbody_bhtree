@@ -10,7 +10,6 @@ cdef extern from "Octree.h":
         void integrateNSteps(float, float, int)
         float energy()
         float angularMomentum()
-        void traverse()
    
 
 cdef class OTree:
@@ -33,6 +32,3 @@ cdef class OTree:
     
     def angularMomentum(self):
         return self.thisptr.angularMomentum()
-      
-    def traverse(self):
-        self.thisptr.traverse()

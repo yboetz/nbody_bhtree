@@ -10,7 +10,7 @@ from distutils.extension import Extension
 from Cython.Build import cythonize
 
 extensions = [Extension("Octree", ["Octree.pyx"],
-                        extra_compile_args=["-std=c++11", "-O3", "-fopenmp"],
+                        extra_compile_args=["-std=c++11", "-O3", "-fopenmp", "-msse3", "-march=native"],
                         extra_link_args=["-O3", "-lgomp", "-lpthread"],
                         language="c++")]
 

@@ -1,5 +1,7 @@
 #include <iostream>
 #include <algorithm>
+#include <mmintrin.h>
+#include <pmmintrin.h>
 
 
 // Calculates cross product of vectors a & b and stores it in c
@@ -9,62 +11,66 @@ void cross(float* a, float* b, float* c)
     c[1] = a[2]*b[0] - a[0]*b[2];
     c[2] = a[0]*b[1] - a[1]*b[0];
     }
-// Calculates acceleration between p1 and p2 and stores it in a
-void accel(float* p1, float* p2, float* a, float m2, float eps2)
-    {
-    a[0] = p2[0] - p1[0];
-    a[1] = p2[1] - p1[1];
-    a[2] = p2[2] - p1[2];
-       
-    float f = a[0]*a[0] + a[1]*a[1] + a[2]*a[2] + eps2;
-    f = 1.0f/sqrt(f);
-    f = m2 * f * f * f;
+// Calculates acceleration between p1 and p2
+__m128 accel(__m128 p1, __m128 p2, float eps2)
+    {   
+    __m128 a = _mm_sub_ps(p2, p1);
+    __m128 m2 = _mm_set1_ps(p2[3]);
     
-    a[0] *= f;
-    a[1] *= f;
-    a[2] *= f;
-    }
+    __m128 f = _mm_mul_ps(a, a);
+    f[3] = eps2;
+
+    f = _mm_hadd_ps(f, f);
+    f = _mm_hadd_ps(f, f);
+    
+    __m128 rf = 1.0f/f;
+    f = _mm_mul_ps(_mm_rsqrt_ps(f), rf);
+    f = _mm_mul_ps(f, m2);
+
+    a = _mm_mul_ps(a, f);
+    
+    return a;
+    }      
 // Calculates potential between p1 and p2
-float pot(float* p1, float* p2, float m1, float m2)
+float pot(__m128 p1, __m128 p2)
     {
-    float d[3];
-    d[0] = p2[0] - p1[0];
-    d[1] = p2[1] - p1[1];
-    d[2] = p2[2] - p1[2];
+    float m1 = p1[3];
+    float m2 = p2[3];
+    
+    __m128 d = _mm_sub_ps(p2, p1);
+    d = _mm_mul_ps(d, d);
        
-    float f = d[0]*d[0] + d[1]*d[1] + d[2]*d[2];
+    float f = d[0] + d[1] + d[2];
     f = m1 * m2 / sqrt(f);
     
     return f;
     }
 // Returns squared distance between p1 & p2
-float dist(float* p1, float* p2)
+float dist(__m128 p1, __m128 p2)
     {
-    float res[3];
-    res[0] = p2[0] - p1[0];
-    res[1] = p2[1] - p1[1];
-    res[2] = p2[2] - p1[2];
+    __m128 res = _mm_sub_ps(p2, p1);
+    res = _mm_mul_ps(res, res);
     
-    return res[0]*res[0] + res[1]*res[1] + res[2]*res[2];    
+    return res[0] + res[1] + res[2];   
     }
     
 // Base class for both leaf & cell. Has all the basic definitions
 class Node
     {  
     public:
-        static float octIdx[8][3];
+        static __m128 octIdx[8];
         
         bool type;                                          // Type of node: Leaf == 1, Cell == 0
-        float side, m;
-        float midp[3];
-        float com[3] = {0, 0, 0};
+        __m128 midp;
+        __m128 com = {0.0f,0.0f,0.0f,0.0f};
         
         Node(float*, float);
-        bool contains(float*);
-        short whichOct(float*);      
+        Node(__m128);
+        bool contains(__m128);
+        short whichOct(__m128);      
     };
     
-float Node::octIdx[8][3] = {{-1,-1,-1},{1,-1,-1},{-1,1,-1},{1,1,-1},{-1,-1,1},{1,-1,1},{-1,1,1},{1,1,1}};
+__m128 Node::octIdx[8] = {{-1,-1,-1,-2},{1,-1,-1,-2},{-1,1,-1,-2},{1,1,-1,-2},{-1,-1,1,-2},{1,-1,1,-2},{-1,1,1,-2},{1,1,1,-2}};
 
 // Node constructor. Sets midpoint and side length
 Node::Node(float* mp, float s)
@@ -72,28 +78,30 @@ Node::Node(float* mp, float s)
     midp[0] = mp[0];
     midp[1] = mp[1];
     midp[2] = mp[2];
-    side = s;
-    m = 0;
+    midp[3] = s;
+    }
+// Node constructor with float4 vector. Sets midpoint and side length
+Node::Node(__m128 mp)
+    {
+    midp = mp;
     }
 // Returns true if position at p is contained in Node
-bool Node::contains(float* p)
+bool Node::contains(__m128 p)
     {
-    float d[3];
-    d[0] = (midp)[0] - p[0];
-    d[1] = (midp)[1] - p[1];
-    d[2] = (midp)[2] - p[2];
-    float hside = side / 2.0f;
+    __m128 d = midp - p;
+    __m128 hside = _mm_set1_ps(midp[3] / 2.0f);
+    __m128 c1 = _mm_cmplt_ps(d, hside);
+    __m128 c2 = _mm_cmplt_ps(-hside, d);
+    c1 = _mm_and_ps(c1, c2);
     
-    if(fabs(d[0]) < hside && fabs(d[1]) < hside && fabs(d[2]) < hside) return 1;
-    else return 0;
+    return (c1[0] && c1[1] && c1[2]);
     }
 // Returns integer value of suboctant of position p
-short Node::whichOct(float* p)
+short Node::whichOct(__m128 p)
     {
-    short res = 0;
-    res += (midp[0] < p[0]);
-    res += 2 * (midp[1] < p[1]);
-    res += 4 * (midp[2] < p[2]);
+    __m128 _res = _mm_cmplt_ps(midp, p);
+    _res = _mm_and_ps(_mm_set1_ps(1.0f), _res);
+    short res = (short)(_res[0] + 2*_res[1] + 4*_res[2]);
     return res;    
     }
     
@@ -102,6 +110,7 @@ class Leaf: public Node
     {
     public: 
         Leaf(float*, float);
+        Leaf(__m128);
     };
     
 // Leaf constructor. Calls Node constructor & sets type
@@ -110,7 +119,12 @@ Leaf::Leaf(float* mp, float s)
     {
     type = 1;
     }
-
+// Leaf constructor for SSE. Calls Node constructor & sets type
+Leaf::Leaf(__m128 mp) 
+    : Node(mp)
+    {
+    type = 1;
+    }
 // Cell: Class for a node with children & multiple bodies
 class Cell: public Node
     {
@@ -118,9 +132,9 @@ class Cell: public Node
         Node* subp[8] = {NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL};       // Pointer to children
         
         Cell(float*, float);
-        void insert(float*, int, Leaf**);
-        void insertMultiple(float*, int, Leaf**);
-    
+        Cell(__m128);
+        void insert(__m128, int, Leaf**);
+        void insertMultiple(float*, int, Leaf**); 
     };
     
 // Cell constructor. Calls Node constructor & sets type
@@ -129,74 +143,69 @@ Cell::Cell(float* mp, float s)
     {
     type = 0;
     }
-
+// Cell constructor. Calls Node constructor & sets type
+Cell::Cell(__m128 mp) 
+    : Node(mp)
+    {
+    type = 0;
+    }
 // Recursively inserts a body into cell
-void Cell::insert(float* p, int n, Leaf** leavesptr)
+void Cell::insert(__m128 p, int n, Leaf** leavesptr)
     {
     short i = whichOct(p);
     
     if(subp[i] == NULL)                                         // If child does not exist, create leaf and insert body into leaf.
         {
-        float _midp[3];
-        float _side = side / 4.0f;
-        _midp[0] = midp[0] + octIdx[i][0] * _side;
-        _midp[1] = midp[1] + octIdx[i][1] * _side;
-        _midp[2] = midp[2] + octIdx[i][2] * _side;
+        __m128 _midp;
+        __m128 _side = _mm_set1_ps(midp[3] / 4.0f);
         
-        Leaf* _leaf = new Leaf (_midp, 2.0f * _side);           // create new leaf
+        _midp = _mm_fmadd_ps(octIdx[i], _side, midp);
+                  
+        Leaf* _leaf = new Leaf (_midp);                         // create new leaf
         subp[i] = (Node*)_leaf;                                 // append ptr to leaf in list of subpointers
         leavesptr[n] = _leaf;                                   // Append ptr to leaf to a global list of all leaves  
                 
-        _leaf->m = p[3];                                        // Put pos and m into leaf
-        _leaf->com[0] = p[0];
-        _leaf->com[1] = p[1];
-        _leaf->com[2] = p[2];
-
+        _leaf->com = p;                                         // Put pos and m into leaf
         }
     else if(subp[i]->type)                                      // If child == leaf, create new cell in place of leaf and insert both bodies in cell
         {
         Leaf* _leaf  = (Leaf*)subp[i];
-        Cell* _cell = new Cell (_leaf->midp, _leaf->side);      // Create new cell in place of original leaf 
+        Cell* _cell = new Cell (_leaf->midp);                   // Create new cell in place of original leaf 
         subp[i] = (Node*)_cell;
 
-        _cell->m = _leaf->m;
-        _cell->com[0] = _leaf->com[0];
-        _cell->com[1] = _leaf->com[1];
-        _cell->com[2] = _leaf->com[2];
+        _cell->com = _leaf->com;
         
-        short _i = _cell->whichOct(_leaf->com);                // Calculates suboctand of original leaf
+        short _i = _cell->whichOct(_leaf->com);                 // Calculates suboctand of original leaf
         _cell->subp[_i] = (Node*)_leaf;
         
         // Set parameters of leaf
-        float _side = (_cell->side) / 4.0f;
-        _leaf->midp[0] += octIdx[_i][0] * _side;
-        _leaf->midp[1] += octIdx[_i][1] * _side;
-        _leaf->midp[2] += octIdx[_i][2] * _side;
-        _leaf->side = 2.0f * _side;
-        
-        _cell->insert(p, n, leavesptr);
-        
+        __m128 _side = _mm_set1_ps(_cell->midp[3] / 4.0f);
+        _leaf->midp = _mm_fmadd_ps(octIdx[_i], _side, _leaf->midp);  
+                             
+        _cell->insert(p, n, leavesptr);      
         }
     else ((Cell*)subp[i])->insert(p, n, leavesptr);             // If child == cell, recursively insert body into child
     
-    // Set new mass & center of mass        
-    float _m = p[3];
-    float M = m + _m;
-    com[0] = (com[0] * m + p[0] * _m) / M;
-    com[1] = (com[1] * m + p[1] * _m) / M;
-    com[2] = (com[2] * m + p[2] * _m) / M;
-    m = M;    
+    // Set new mass & center of mass   
+    __m128 _m = _mm_set1_ps(p[3]);
+    __m128 m = _mm_set1_ps(com[3]);
+    __m128 M = _mm_add_ps(m, _m);
+    
+    __m128 _t1 = _mm_mul_ps(com, m);
+    _t1 = _mm_fmadd_ps(p, _m, _t1);
+    
+    com = _mm_div_ps(_t1, M);
+    com[3] = M[0];     
     }
 // Calls insertion function for all N bodies in p
 void Cell::insertMultiple(float* p, int N, Leaf** leavesptr)
     {
     for(int i = 0; i<N; i++)
         {
-        insert(p + 4*i, i, leavesptr);
+        __m128 _p = _mm_load_ps(p + 4*i);
+        insert(_p, i, leavesptr);
         }
     }
-
-void traverse(Node*, int); // Define function so it can be called in class Octree
 
 // Octree class. Contains pointer to a root cell and a list of all leaves
 class Octree
@@ -218,17 +227,10 @@ class Octree
         float leafPot(Cell*, Leaf*);
         float energy();
         float angularMomentum();
-        void leafAccel(Cell*, Leaf*, float*, float);
+        __m128 leafAccel(Cell*, Leaf*, float);
         void integrate(float, float);
         void integrateNSteps(float, float, int);
-        void traverse();
-
     };
-// Traverse function as member of class, so it can be easily called from cython
-void Octree::traverse()
-    {
-    ::traverse(root, 0);
-    }
 
 // Constructor. Sets number of bodies, opening angle, center, creates list with leaves & builds first tree
 Octree::Octree(float* p, float* v, int n, float* center, float th)
@@ -266,16 +268,16 @@ void Octree::delTree(Node* node)
 // Finds boxsize around particles
 float Octree::getBoxSize()
     {
-    float res;
-    float* _pos = new float[3*N];
+    float res = 0;
     for(int i = 0; i < N; i++)
         {
-        _pos[3*i] = fabs(pos[4*i]);
-        _pos[3*i+1] = fabs(pos[4*i+1]);
-        _pos[3*i+2] = fabs(pos[4*i+2]);
-        };
-    res = 2 * (*std::max_element(_pos, _pos + 3*N));
-    delete[] _pos;
+        for(int j = 0; j < 3; j++)
+            {
+            float s = fabs(pos[4*i + j]);
+            if(s > res) res = s;
+            }
+        }
+    res *= 2;
     return res;
     }
 // Creates new root cell and fills it with bodies
@@ -289,11 +291,11 @@ float Octree::leafPot(Cell* node, Leaf* leaf)
     {
     if(node == (Cell*)leaf) return 0.0f;
     
-    float p = 0;
-    if((node->type) || (pow((node->side),2) / dist(node->com, leaf->com) < theta2))
-        return pot(leaf->com, node->com, leaf->m, node->m);
+    if((node->type) || (pow((node->midp[3]),2) / dist(node->com, leaf->com) < theta2))
+        return pot(leaf->com, node->com);
     else
         {
+        float p = 0;
         for(int i = 0; i < 8; i++)
             {
             Cell* ptr = (Cell*)(node->subp[i]);
@@ -302,8 +304,8 @@ float Octree::leafPot(Cell* node, Leaf* leaf)
                 p += leafPot(ptr, leaf);
                 }
             }
-        }
-    return p;
+        return p;
+        } 
     }
 // Calculates energy of system (approximate)
 float Octree::energy()
@@ -315,18 +317,20 @@ float Octree::energy()
     for(int i = 0; i < N; i++)
         {
         int idx = 4*i;
-        #pragma omp atomic
-        V += leafPot((Cell*)root, leaves[i]);
+        Leaf* leaf = leaves[i];
         
         #pragma omp atomic
-        T += (leaves[i]->m) * (vel[idx]*vel[idx] + vel[idx+1]*vel[idx+1] + vel[idx+2]*vel[idx+2]);
+        V += leafPot((Cell*)root, leaf);
+        
+        #pragma omp atomic
+        T += (leaf->com[3]) * (vel[idx]*vel[idx] + vel[idx+1]*vel[idx+1] + vel[idx+2]*vel[idx+2]);
         }
     
     return 0.5f * (T - V);
     }
 // Calculates angular momentum of system (exact)
 float Octree::angularMomentum()
-    {
+    {   
     float J = 0;
     
     for(int i = 0; i < N; i++)
@@ -351,43 +355,41 @@ float Octree::angularMomentum()
     return J;
     }
 // Traverses tree and calculates acceleration for a leaf
-void Octree::leafAccel(Cell* node, Leaf* leaf, float* a, float eps2)
+__m128 Octree::leafAccel(Cell* node, Leaf* leaf, float eps2)
     {
-    float _a[3] = {0 ,0, 0};
-    if((node->type) || (pow((node->side),2) / dist(node->com, leaf->com) < theta2))
-        accel(leaf->com, node->com, _a, node->m, eps2);
+    if((node->type) || (pow((node->midp[3]),2) / dist(node->com, leaf->com) < theta2))
+        return accel(leaf->com, node->com, eps2);
     else
         {
+        __m128 a = {0.0f, 0.0f, 0.0f, 0.0f};
         for(int i = 0; i < 8; i++)
             {
             Cell* ptr = (Cell*)(node->subp[i]);
             if(ptr != NULL)
                 {
-                leafAccel(ptr, leaf, _a, eps2);
+                a = _mm_add_ps(a,leafAccel(ptr, leaf, eps2));
                 }
             }
+        return a;
         }
-    a[0] += _a[0];
-    a[1] += _a[1];
-    a[2] += _a[2];
     }
 // Finds acceleration for every leaf and updates pos & vel via semi-implizit Euler integration
 void Octree::integrate(float dt, float eps2)
     {
+    __m128 dtv = {dt, dt, dt, 0.0f};
     #pragma omp parallel for schedule(dynamic,100)
     for(int i = 0; i < N; i++)
         {
         int idx = 4*i;
-        float a[3] = {0,0,0};
-        leafAccel((Cell*)root, leaves[i], a, eps2);
+        __m128 a = leafAccel((Cell*)root, leaves[i], eps2);
+        __m128 p = _mm_load_ps(pos + idx);
+        __m128 v = _mm_load_ps(vel + idx);
         
-        vel[idx] += dt * a[0];
-        vel[idx+1] += dt * a[1];
-        vel[idx+2] += dt * a[2];
-        
-        pos[idx] += dt * vel[idx];
-        pos[idx+1] += dt * vel[idx+1];
-        pos[idx+2] += dt * vel[idx+2];
+        v = _mm_fmadd_ps(dtv, a, v);
+        p = _mm_fmadd_ps(dtv, v, p);
+               
+        _mm_store_ps(pos + idx, p);
+        _mm_store_ps(vel + idx, v);
         }
     delTree(root);
     buildTree();
@@ -401,12 +403,13 @@ void Octree::integrateNSteps(float dt, float eps2, int n)
         }
     }
 
+
 // Recursively traverses tree and prints out level and node
 void traverse(Node* node, int level)
     {
-    std::cout << "Lvl " << level << ", "<< "Type = "<<((Cell*)node)->type << ", m = " << ((Cell*)node)->m 
+    std::cout << "Lvl " << level << ", "<< "Type = "<<((Cell*)node)->type << ", m = " << ((Cell*)node)->com[3] 
     << ", com = (" << ((Cell*)node)->com[0] << ", " << ((Cell*)node)->com[1] << ", " << ((Cell*)node)->com[2] 
-    << "), midp = (" << ((Cell*)node)->midp[0] << ", " << ((Cell*)node)->midp[1] << ", " << ((Cell*)node)->midp[2] << "), Side = " << ((Cell*)node)->side << "\n";
+    << "), midp = (" << ((Cell*)node)->midp[0] << ", " << ((Cell*)node)->midp[1] << ", " << ((Cell*)node)->midp[2] << "), Side = " << ((Cell*)node)->midp[3] << "\n";
     if(node->type == 0)
         {
         for(int i = 0; i < 8; i++)
@@ -424,4 +427,3 @@ void prtleaves(Octree* root)
         std::cout << "Type = "<<ptr->type << ", com = (" << ptr->com[0] << ", " << ptr->com[1] << ", " << ptr->com[2] << ")\n";
         }
     }
-    
