@@ -5,7 +5,7 @@ from time import time
 
 cdef extern from "Octree.h":
     cdef cppclass Octree:
-        Octree(float*, float*, int, float*, float) except +
+        Octree(float*, float*, int, float) except +
         void integrate(float, float)
         void integrateNSteps(float, float, int)
         float energy()
@@ -15,8 +15,8 @@ cdef extern from "Octree.h":
 cdef class OTree:
     cdef Octree *thisptr
     
-    def __cinit__(self, np.ndarray[np.float32_t, ndim=1, mode="c"] pos, np.ndarray[np.float32_t, ndim=1, mode="c"] vel, int n, np.ndarray[np.float32_t, ndim=1, mode="c"] cent, np.float32_t th):
-        self.thisptr = new Octree (&pos[0], &vel[0], n, &cent[0], th)
+    def __cinit__(self, np.ndarray[np.float32_t, ndim=1, mode="c"] pos, np.ndarray[np.float32_t, ndim=1, mode="c"] vel, int n, np.float32_t th):
+        self.thisptr = new Octree (&pos[0], &vel[0], n, th)
         
     def __dealloc__(self):
         del self.thisptr

@@ -55,7 +55,7 @@ class NBodyWidget(gl.GLViewWidget):
     def init(self):
         # Timestep
         self.dt = np.float32(.005)
-        # Softening length
+        # Softening length squared
         self.e = np.float32(.05**2)
         # Tickrate. 1000/max framerate
         self.tickRate = 1000./60
@@ -63,8 +63,6 @@ class NBodyWidget(gl.GLViewWidget):
         self.burst = 1
         # Set distance to origin
         self.opts['distance'] = 20
-        # Center of Octree
-        self.center = np.array([0,0,0], dtype = np.float32)
         # Opening angle
         self.theta = np.float32(.25)
             
@@ -81,7 +79,7 @@ class NBodyWidget(gl.GLViewWidget):
         # Initial read in of positions and velocity from file
         self.read('Data/Plummer_4096')
         # Initialize Octree
-        self.oct = OTree(self.pos, self.vel, self.n, self.center, self.theta)
+        self.oct = OTree(self.pos, self.vel, self.n, self.theta)
         
         # Create variable for GLLinePlotItem
         self.lp = None
@@ -298,7 +296,7 @@ class NBodyWidget(gl.GLViewWidget):
         try:
             self.read(path)
             del self.oct
-            self.oct = OTree(self.pos, self.vel, self.n, self.center, self.theta)
+            self.oct = OTree(self.pos, self.vel, self.n, self.theta)
             self.delLinePlot()
             self.resetColors()
             self.setSize(self.size)
