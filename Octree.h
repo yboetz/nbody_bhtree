@@ -333,13 +333,12 @@ float Octree::energy()
     #pragma omp parallel for schedule(dynamic,100)
     for(int i = 0; i < N; i++)
         {
-        int idx = 4*i;
         Leaf* leaf = leaves[i];
         
         #pragma omp atomic
         V += leafPot(leaf);
         
-        __m128 v = _mm_load_ps(vel + idx);
+        __m128 v = _mm_load_ps(vel + 4*i);
         v = _mm_mul_ps(v,v);
         
         #pragma omp atomic
@@ -351,22 +350,26 @@ float Octree::energy()
 // Calculates angular momentum of system (exact)
 float Octree::angularMomentum()
     {
-    float J = 0;
-    
+    __m128 J = {0.0f,0.0f,0.0f,0.0f};
+    __m128 mv = {0.0f,0.0f,0.0f,0.0f};
+
     for(int i = 0; i < N; i++)
         {
         int idx = 4*i;
-        
+               
         __m128 p = _mm_load_ps(pos + idx);
-        __m128 v = _mm_mul_ps(_mm_set1_ps(p[3]), _mm_load_ps(vel + idx));
+        __m128 m = _mm_set1_ps(p[3]);
+        __m128 v = _mm_mul_ps(m, _mm_load_ps(vel + idx));
         
-        __m128 c = cross(p, v);    
-        c = _mm_mul_ps(c, c);
-
-        J += sqrt(c[0] + c[1] + c[2]);        
+        J = _mm_add_ps(J, cross(p, v));    
+      
+        mv = _mm_add_ps(mv,v);
         }
-        
-    return J;
+    
+    J = _mm_sub_ps(J,cross(root->com,mv));
+    J = _mm_mul_ps(J,J);    
+
+    return sqrt(J[0] + J[1] + J[2]);
     }
 // Traverses tree and calculates acceleration for a leaf
 __m128 Octree::leafAccel(Leaf* leaf)

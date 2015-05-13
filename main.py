@@ -392,9 +392,9 @@ class NBodyWidget(gl.GLViewWidget):
 
         E1, J1 = self.oct.energy(), self.oct.angularMomentum()
         dE, dJ = E1 - E0, J1 - J0
-        print('Did %i cycles in %.2f seconds.' %(num, T))
-        print('E0 =  %.2f, E1 = %.2f\nJ0 = %.2f, J1 = %.2f' %(E0,E1,J0,J1))
-        print('dE = %.2f = %.2f E0\ndJ = %.2f = %.2f J0\n'
+        print('Did %i cycles in %.3f seconds.' %(num, T))
+        print('E0 =  %.3f, E1 = %.3f\nJ0 = %.3f, J1 = %.3f' %(E0,E1,J0,J1))
+        print('dE = %.3f = %.3f E0\ndJ = %.3f = %.3f J0\n'
               %(dE, dE / E0, dJ, dJ / J0))        
     
     # Calls testFunction in separate thread
