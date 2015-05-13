@@ -218,6 +218,7 @@ class Octree
         __m128 leafAccel(Leaf*);
         void integrate(float);
         void integrateNSteps(float, int);
+        __m128 centreOfMomentum();
     };
 
 // Constructor. Sets number of bodies, opening angle, center, creates list with leaves & builds first tree
@@ -345,6 +346,10 @@ float Octree::energy()
         T += (leaf->com[3]) * (v[0] + v[1] + v[2]);
         }
 
+    __m128 mv = centreOfMomentum();
+    mv = _mm_mul_ps(mv, mv);
+    T -= (root->com[3]) * (mv[0] + mv[1] + mv[2]);
+
     return 0.5f * (T - V);
     }
 // Calculates angular momentum of system (exact)
@@ -418,6 +423,23 @@ void Octree::integrateNSteps(float dt, int n)
         {
         integrate(dt);
         }
+    }
+// Returns centre of momentum
+__m128 Octree::centreOfMomentum()
+    {
+    __m128 mv = {0.0f,0.0f,0.0f,0.0f};
+
+    for(int i = 0; i < N; i++)
+        {
+        int idx = 4*i;
+        __m128 m = _mm_set1_ps(pos[idx + 3]);
+        __m128 v = _mm_mul_ps(m, _mm_load_ps(vel + idx));
+
+        mv = _mm_add_ps(mv,v);
+        }
+    mv = _mm_div_ps(mv, _mm_set1_ps(root->com[3]));
+    
+    return mv;
     }
 
 
