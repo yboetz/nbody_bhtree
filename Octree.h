@@ -21,7 +21,9 @@ __m128 accel(__m128 p1, __m128 p2, float eps2)
     
     __m128 f = _mm_mul_ps(a, a);
     
-    f = _mm_set1_ps(f[0] + f[1] + f[2] + eps2);
+    f[3] = eps2;
+    f = _mm_hadd_ps(f,f);
+    f = _mm_hadd_ps(f,f);
    
     f = f*f*f;
     f = _mm_rsqrt_ps(f);
@@ -213,9 +215,10 @@ class Octree
         float* pos;
         float* vel;
         float theta2;
+        float eps2;
         __m128 cent = {0.0f,0.0f,0.0f,0.0f};
 
-        Octree(float*, float*, int, float);
+        Octree(float*, float*, int, float, float);
         ~Octree();
         void buildTree();
         void getBoxSize();
@@ -223,18 +226,19 @@ class Octree
         float leafPot(Cell*, Leaf*);
         float energy();
         float angularMomentum();
-        __m128 leafAccel(Cell*, Leaf*, float);
-        void integrate(float, float);
-        void integrateNSteps(float, float, int);
+        __m128 leafAccel(Cell*, Leaf*);
+        void integrate(float);
+        void integrateNSteps(float, int);
     };
 
 // Constructor. Sets number of bodies, opening angle, center, creates list with leaves & builds first tree
-Octree::Octree(float* p, float* v, int n, float th)
+Octree::Octree(float* p, float* v, int n, float th, float e2)
     {
     pos = p; 
     vel = v;
     N = n;
     theta2 = th;
+    eps2 = e2;
     leaves = new Leaf*[N];
     buildTree();  
     }
@@ -258,6 +262,14 @@ void Octree::delTree(Node* node)
         }
     delete (Cell*)node;
     }
+// Creates new root cell and fills it with bodies
+void Octree::buildTree()
+    {
+    getBoxSize();
+    root = new Cell (cent);  
+    ((Cell*)root)->insertMultiple(pos, N, leaves);
+    cent = root->com;    
+    }
 // Finds boxsize around particles
 void Octree::getBoxSize()
     {
@@ -276,14 +288,6 @@ void Octree::getBoxSize()
         }
         
     cent[3] = 2*side;
-    }
-// Creates new root cell and fills it with bodies
-void Octree::buildTree()
-    {
-    getBoxSize();
-    root = new Cell (cent);  
-    ((Cell*)root)->insertMultiple(pos, N, leaves);
-    cent = root->com;    
     }
 // Traverses tree and calculates potential for a leaf
 float Octree::leafPot(Cell* node, Leaf* leaf)
@@ -324,7 +328,7 @@ float Octree::energy()
         #pragma omp atomic
         T += (leaf->com[3]) * (vel[idx]*vel[idx] + vel[idx+1]*vel[idx+1] + vel[idx+2]*vel[idx+2]);
         }
-        
+   
     return 0.5f * (T - V);
     }
 // Calculates angular momentum of system (exact)
@@ -348,7 +352,7 @@ float Octree::angularMomentum()
     return J;
     }
 // Traverses tree and calculates acceleration for a leaf
-__m128 Octree::leafAccel(Cell* node, Leaf* leaf, float eps2)
+__m128 Octree::leafAccel(Cell* node, Leaf* leaf)
     {
     if((node->type) || (pow((node->midp[3]),2) / dist(node->com, leaf->com) < theta2))
         return accel(leaf->com, node->com, eps2);
@@ -360,21 +364,22 @@ __m128 Octree::leafAccel(Cell* node, Leaf* leaf, float eps2)
             Cell* ptr = (Cell*)(node->subp[i]);
             if(ptr != NULL)
                 {
-                a = _mm_add_ps(a,leafAccel(ptr, leaf, eps2));
+                a = _mm_add_ps(a,leafAccel(ptr, leaf));
                 }
             }
         return a;
         }
     }
 // Finds acceleration for every leaf and updates pos & vel via semi-implizit Euler integration
-void Octree::integrate(float dt, float eps2)
+void Octree::integrate(float dt)
     {
     __m128 dtv = {dt, dt, dt, 0.0f};
+    
     #pragma omp parallel for schedule(dynamic,100)
     for(int i = 0; i < N; i++)
         {
         int idx = 4*i;
-        __m128 a = leafAccel((Cell*)root, leaves[i], eps2);
+        __m128 a = leafAccel((Cell*)root, leaves[i]);
         __m128 p = _mm_load_ps(pos + idx);
         __m128 v = _mm_load_ps(vel + idx);
         
@@ -388,11 +393,11 @@ void Octree::integrate(float dt, float eps2)
     buildTree();
     }
 // Calls integration function a number of times
-void Octree::integrateNSteps(float dt, float eps2, int n)
+void Octree::integrateNSteps(float dt, int n)
     {
     for(int i = 0; i < n; i++)
         {
-        integrate(dt, eps2);
+        integrate(dt);
         }
     }
 

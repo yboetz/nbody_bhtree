@@ -79,7 +79,7 @@ class NBodyWidget(gl.GLViewWidget):
         # Initial read in of positions and velocity from file
         self.read('Data/Plummer_4096')
         # Initialize Octree
-        self.oct = OTree(self.pos, self.vel, self.n, self.theta)
+        self.oct = OTree(self.pos, self.vel, self.n, self.theta, self.e)
         
         # Create variable for GLLinePlotItem
         self.lp = None
@@ -109,7 +109,7 @@ class NBodyWidget(gl.GLViewWidget):
     # Calls integrate fucntion and updates data
     def updateScatterPlot(self):
 #        st = time()
-        self.oct.integrateNSteps(self.dt, self.e, self.burst)
+        self.oct.integrateNSteps(self.dt, self.burst)
 #        print(time() - st)
         self.sp.setData(pos=self.pos.reshape((self.n,4))[:,0:3], 
                         size = self.sizeArray, color = self.colors)
@@ -296,7 +296,7 @@ class NBodyWidget(gl.GLViewWidget):
         try:
             self.read(path)
             del self.oct
-            self.oct = OTree(self.pos, self.vel, self.n, self.theta)
+            self.oct = OTree(self.pos, self.vel, self.n, self.theta, self.e)
             self.delLinePlot()
             self.resetColors()
             self.setSize(self.size)
@@ -378,7 +378,7 @@ class NBodyWidget(gl.GLViewWidget):
         num = 0
         T = time()   
         while time() - T < 2:
-            self.oct.integrateNSteps(np.float32(dt), self.e, 10)
+            self.oct.integrateNSteps(np.float32(dt), 10)
             num += 10;
         T = time() - T
         
@@ -387,7 +387,7 @@ class NBodyWidget(gl.GLViewWidget):
         E0, J0 = self.oct.energy(), self.oct.angularMomentum()
 
         T = time()
-        self.oct.integrateNSteps(np.float32(dt), self.e, num)
+        self.oct.integrateNSteps(np.float32(dt), num)
         T = time() - T
 
         E1, J1 = self.oct.energy(), self.oct.angularMomentum()
