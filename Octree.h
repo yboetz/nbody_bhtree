@@ -290,22 +290,19 @@ void Octree::threadTree(Node* p, Node* n)
 // Finds boxsize around particles
 void Octree::getBoxSize()
     {
-    float side = 0;
+    __m128 side = {0.0f,0.0f,0.0f,0.0f};
    
     for(int i = 0; i < N; i++)
         {   
-        int idx = 4*i;
-        __m128 p = _mm_load_ps(pos + idx);
-        
-        float s = fabs(p[0]);
-        if(s > side) side = s;
-        s = fabs(p[1]);
-        if(s > side) side = s;
-        s = fabs(p[2]);
-        if(s > side) side = s;         
+        __m128 p = _mm_sub_ps(_mm_load_ps(pos + 4*i), cent);
+        p = _mm_andnot_ps(_mm_castsi128_ps(_mm_set1_epi32(0x80000000)), p); // Absolute value
+        side = _mm_max_ps(side,p);      
         }
-
-    cent[3] = 2*side;
+    float s = side[0];
+    if(s < side[1]) s = side[1];
+    if(s < side[2]) s = side[2];
+    
+    cent[3] = 2*s;
     }
 // Traverses tree and calculates potential for a leaf
 float Octree::leafPot(Leaf* leaf)

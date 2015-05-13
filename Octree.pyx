@@ -1,7 +1,6 @@
 import numpy as np
 cimport numpy as np
 from libcpp cimport bool
-from time import time
 
 cdef extern from "Octree.h":
     cdef cppclass Octree:
