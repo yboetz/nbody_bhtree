@@ -34,15 +34,12 @@ __m128 accel(__m128 p1, __m128 p2, float eps2)
     }      
 // Calculates potential between p1 and p2
 float pot(__m128 p1, __m128 p2)
-    {
-    float m1 = p1[3];
-    float m2 = p2[3];
-    
+    {    
     __m128 d = _mm_sub_ps(p2, p1);
     d = _mm_mul_ps(d, d);
        
     float f = d[0] + d[1] + d[2];
-    f = m1 * m2 / sqrt(f);
+    f = p1[3] * p2[3] / sqrt(f);
     
     return f;
     }
@@ -64,10 +61,10 @@ class Node
         bool type;                                          // Type of node: Leaf == 1, Cell == 0
         __m128 midp;
         __m128 com = {0.0f,0.0f,0.0f,0.0f};
+        Node* next = NULL;
         
         Node(float*, float);
         Node(__m128);
-        bool contains(__m128);
         short whichOct(__m128);      
     };
     
@@ -86,24 +83,13 @@ Node::Node(__m128 mp)
     {
     midp = mp;
     }
-// Returns true if position at p is contained in Node
-bool Node::contains(__m128 p)
-    {
-    __m128 d = midp - p;
-    __m128 hside = _mm_set1_ps(midp[3] / 2.0f);
-    __m128 c1 = _mm_cmplt_ps(d, hside);
-    __m128 c2 = _mm_cmplt_ps(-hside, d);
-    c1 = _mm_and_ps(c1, c2);
-    
-    return (c1[0] && c1[1] && c1[2]);
-    }
 // Returns integer value of suboctant of position p
 short Node::whichOct(__m128 p)
     {
-    __m128 _res = _mm_cmplt_ps(midp, p);
-    _res = _mm_and_ps(_mm_set1_ps(1.0f), _res);
-    short res = (short)(_res[0] + 2*_res[1] + 4*_res[2]);
-    return res;    
+    __m128 c = _mm_cmplt_ps(midp, p);
+    c = _mm_and_ps(_mm_set1_ps(1.0f), c);
+    short oct = (short)(c[0] + 2*c[1] + 4*c[2]);
+    return oct;
     }
     
 // Leaf: Class for a node without children & a single body within it
@@ -126,11 +112,13 @@ Leaf::Leaf(__m128 mp)
     {
     type = 1;
     }
+
 // Cell: Class for a node with children & multiple bodies
 class Cell: public Node
     {
     public:
         Node* subp[8] = {NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL};       // Pointer to children
+        Node* more = NULL;                                                      // Pointer to first child
         
         Cell(float*, float);
         Cell(__m128);
@@ -221,12 +209,13 @@ class Octree
         Octree(float*, float*, int, float, float);
         ~Octree();
         void buildTree();
+        void threadTree(Node*, Node*);
         void getBoxSize();
         void delTree(Node*);                    // helper function for deconstructor
-        float leafPot(Cell*, Leaf*);
+        float leafPot(Leaf*);
         float energy();
         float angularMomentum();
-        __m128 leafAccel(Cell*, Leaf*);
+        __m128 leafAccel(Leaf*);
         void integrate(float);
         void integrateNSteps(float, int);
     };
@@ -240,7 +229,7 @@ Octree::Octree(float* p, float* v, int n, float th, float e2)
     theta2 = th;
     eps2 = e2;
     leaves = new Leaf*[N];
-    buildTree();  
+    buildTree();
     }
 // Recursively deletes every node and delete leaves
 Octree::~Octree()
@@ -268,7 +257,35 @@ void Octree::buildTree()
     getBoxSize();
     root = new Cell (cent);  
     ((Cell*)root)->insertMultiple(pos, N, leaves);
-    cent = root->com;    
+    cent = root->com;
+    threadTree(root, root);
+    }
+// Threads tree for non-recursive walk
+void Octree::threadTree(Node* p, Node* n)
+    {
+    p->next = n;
+    if(p->type == 0)
+        {
+        Cell* ptr = (Cell*)p;
+        int ndesc = 0;
+        int i;
+        Node* desc[9];
+        ndesc = 0;
+        for(i = 0; i < 8; i++)
+            {
+            Node* _ptr = (Node*)(ptr->subp[i]);
+            if(_ptr != NULL)
+                {
+                desc[ndesc++] = _ptr;
+                }
+            }
+        ptr->more = desc[0];
+        desc[ndesc] = n;
+        for(i = 0; i < ndesc; i++)
+            {
+            threadTree(desc[i], desc[i+1]);
+            }
+        }
     }
 // Finds boxsize around particles
 void Octree::getBoxSize()
@@ -278,37 +295,37 @@ void Octree::getBoxSize()
     for(int i = 0; i < N; i++)
         {   
         int idx = 4*i;
+        __m128 p = _mm_load_ps(pos + idx);
         
-        float s = fabs(pos[idx]);
+        float s = fabs(p[0]);
         if(s > side) side = s;
-        s = fabs(pos[idx + 1]);
+        s = fabs(p[1]);
         if(s > side) side = s;
-        s = fabs(pos[idx + 2]);
+        s = fabs(p[2]);
         if(s > side) side = s;         
         }
-        
+
     cent[3] = 2*side;
     }
 // Traverses tree and calculates potential for a leaf
-float Octree::leafPot(Cell* node, Leaf* leaf)
-    {
-    if(node == (Cell*)leaf) return 0.0f;
+float Octree::leafPot(Leaf* leaf)
+    {   
+    float p = 0.0f;
     
-    if((node->type) || (pow((node->midp[3]),2) / dist(node->com, leaf->com) < theta2))
-        return pot(leaf->com, node->com);
-    else
-        {
-        float p = 0;
-        for(int i = 0; i < 8; i++)
+    Node* node = root;
+    do
+        {       
+        if((node->type) || (pow((node->midp[3]),2) / dist(node->com, leaf->com) < theta2))
             {
-            Cell* ptr = (Cell*)(node->subp[i]);
-            if(ptr != NULL)
-                {
-                p += leafPot(ptr, leaf);
-                }
+            if((Leaf*)node != leaf) 
+                p += pot(leaf->com, node->com);
+            node = node->next;
             }
-        return p;
-        } 
+        else node = ((Cell*)node)->more;   
+        }
+    while(node != root);
+    
+    return p;
     }
 // Calculates energy of system (approximate)
 float Octree::energy()
@@ -323,12 +340,15 @@ float Octree::energy()
         Leaf* leaf = leaves[i];
         
         #pragma omp atomic
-        V += leafPot((Cell*)root, leaf);
+        V += leafPot(leaf);
+        
+        __m128 v = _mm_load_ps(vel + idx);
+        v = _mm_mul_ps(v,v);
         
         #pragma omp atomic
-        T += (leaf->com[3]) * (vel[idx]*vel[idx] + vel[idx+1]*vel[idx+1] + vel[idx+2]*vel[idx+2]);
+        T += (leaf->com[3]) * (v[0] + v[1] + v[2]);
         }
-   
+
     return 0.5f * (T - V);
     }
 // Calculates angular momentum of system (exact)
@@ -352,34 +372,33 @@ float Octree::angularMomentum()
     return J;
     }
 // Traverses tree and calculates acceleration for a leaf
-__m128 Octree::leafAccel(Cell* node, Leaf* leaf)
+__m128 Octree::leafAccel(Leaf* leaf)
     {
-    if((node->type) || (pow((node->midp[3]),2) / dist(node->com, leaf->com) < theta2))
-        return accel(leaf->com, node->com, eps2);
-    else
-        {
-        __m128 a = {0.0f, 0.0f, 0.0f, 0.0f};
-        for(int i = 0; i < 8; i++)
+    __m128 a = {0.0f,0.0f,0.0f,0.0f};
+    
+    Node* node = root;
+    do
+        {       
+        if((node->type) || (pow((node->midp[3]),2) / dist(node->com, leaf->com) < theta2))
             {
-            Cell* ptr = (Cell*)(node->subp[i]);
-            if(ptr != NULL)
-                {
-                a = _mm_add_ps(a,leafAccel(ptr, leaf));
-                }
+            a = _mm_add_ps(a, accel(leaf->com, node->com, eps2));
+            node = node->next;
             }
-        return a;
+        else node = ((Cell*)node)->more;   
         }
+    while(node != root);
+    
+    return a;
     }
 // Finds acceleration for every leaf and updates pos & vel via semi-implizit Euler integration
 void Octree::integrate(float dt)
     {
-    __m128 dtv = {dt, dt, dt, 0.0f};
-    
+    __m128 dtv = {dt,dt,dt,0.0f};
     #pragma omp parallel for schedule(dynamic,100)
     for(int i = 0; i < N; i++)
         {
         int idx = 4*i;
-        __m128 a = leafAccel((Cell*)root, leaves[i]);
+        __m128 a = leafAccel(leaves[i]);
         __m128 p = _mm_load_ps(pos + idx);
         __m128 v = _mm_load_ps(vel + idx);
         

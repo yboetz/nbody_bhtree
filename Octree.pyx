@@ -3,7 +3,7 @@ cimport numpy as np
 from libcpp cimport bool
 from time import time
 
-cdef extern from "OctreeThread.h":
+cdef extern from "Octree.h":
     cdef cppclass Octree:
         Octree(float*, float*, int, float, float) except +
         void integrate(float)
