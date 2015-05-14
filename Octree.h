@@ -2,7 +2,7 @@
 #include <math.h>
 #include <xmmintrin.h>
 #include <immintrin.h>
-
+#include <chrono>
 
 // Calculates cross product of vectors a & b
 __m128 cross(__m128 a, __m128 b)
@@ -211,7 +211,7 @@ class Octree
         void buildTree();
         void threadTree(Node*, Node*);
         void getBoxSize();
-        void delTree(Node*);                    // helper function for deconstructor
+        void delTree();                    // helper function for deconstructor
         float leafPot(Leaf*);
         float energy();
         float angularMomentum();
@@ -235,22 +235,31 @@ Octree::Octree(float* p, float* v, int n, float th, float e2)
 // Recursively deletes every node and delete leaves
 Octree::~Octree()
     {
-    delTree(root);    
+    delTree();    
     delete[] leaves;
     }
 // Recursively deletes every node 
-void Octree::delTree(Node* node)
+void Octree::delTree()
     {
-    for(int i = 0; i < 8; i++)
+    Node* node = root;
+    Node* end = root;
+    
+    do
         {
-        Node* ptr = ((Cell*)node)->subp[i];
-        if(ptr != NULL) 
+        if(node->type)
             {
-            if(ptr->type) delete (Leaf*)ptr;
-            else delTree(ptr);
+            Leaf* leaf = (Leaf*)node;
+            node = leaf->next;
+            delete leaf;
+            }
+        else
+            {
+            Cell* cell = (Cell*)node;
+            node = cell->more;
+            delete cell;
             }
         }
-    delete (Cell*)node;
+    while(node != end);
     }
 // Creates new root cell and fills it with bodies
 void Octree::buildTree()
@@ -413,7 +422,7 @@ void Octree::integrate(float dt)
         _mm_store_ps(pos + idx, p);
         _mm_store_ps(vel + idx, v);
         }
-    delTree(root);
+    delTree();
     buildTree();
     }
 // Calls integration function a number of times
