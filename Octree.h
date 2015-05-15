@@ -149,11 +149,11 @@ void Cell::insert(__m128 p, int n, Leaf** leavesptr)
         __m128 _side = _mm_set1_ps(midp[3] / 4.0f);             // Calculate midp of new leaf
         __m128 _midp = _mm_fmadd_ps(octIdx[i], _side, midp);
                   
-        Leaf* _leaf = new Leaf (_midp);                         // Create new leaf
+        Leaf* _leaf = leavesptr[n];                             // Use existing leaf in list
         subp[i] = (Node*)_leaf;                                 // Append ptr to leaf in list of subpointers
-        leavesptr[n] = _leaf;                                   // Append ptr to leaf to a global list of all leaves  
                 
         _leaf->com = p;                                         // Put pos and m into leaf
+        _leaf->midp = _midp;
         }
     else if(ptr->type)                                          // If child == leaf, create new cell in place of leaf and insert both bodies in cell
         {
@@ -230,12 +230,19 @@ Octree::Octree(float* p, float* v, int n, float th, float e2)
     theta2 = th;
     eps2 = e2;
     leaves = new Leaf*[N];
+    for(int i = 0; i < N; i++)
+        {
+        __m128 _p = _mm_load_ps(pos + 4*i);
+        leaves[i] = new Leaf(_p);
+        leaves[i]->com = _p;
+        }
     buildTree();
     }
 // Recursively deletes every node and delete leaves
 Octree::~Octree()
     {
-    delTree();    
+    delTree();
+    for(int i = 0; i < N; i++) delete leaves[i];  
     delete[] leaves;
     }
 // Recursively deletes every node 
@@ -248,9 +255,7 @@ void Octree::delTree()
         {
         if(node->type)
             {
-            Leaf* leaf = (Leaf*)node;
-            node = leaf->next;
-            delete leaf;
+            node = node->next;
             }
         else
             {
