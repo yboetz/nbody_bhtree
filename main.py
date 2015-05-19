@@ -108,9 +108,7 @@ class NBodyWidget(gl.GLViewWidget):
                                               
     # Calls integrate fucntion and updates data
     def updateScatterPlot(self):
-#        st = time()
         self.oct.integrateNSteps(self.dt, self.burst)
-#        print(time() - st)
         self.sp.setData(pos=self.pos.reshape((self.n,4))[:,0:3], 
                         size = self.sizeArray, color = self.colors)
         

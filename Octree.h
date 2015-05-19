@@ -169,13 +169,7 @@ class Octree
         void integrate(float);
         void integrateNSteps(float, int);
         __m128 centreOfMomentum();
-        void traverse();
     };
-void traverse(Node*, int);
-void Octree::traverse()
-    {
-    ::traverse(root, 0);
-    }
 // Constructor. Sets number of bodies, opening angle, creates list with leaves & builds first tree
 Octree::Octree(float* p, float* v, int n, float th, float e2)
     {
