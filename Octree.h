@@ -156,7 +156,7 @@ class Octree
         Octree(float*, float*, int, float, float);
         ~Octree();
         Cell* makeCell(Leaf*);
-        Node* makeRoot();
+        void makeRoot();
         void insert(Cell*, __m128, int);
         void insertMultiple();
         void buildTree();
@@ -203,7 +203,7 @@ Cell* Octree::makeCell(Leaf* leaf)
     if(numCell < cells.size()) 
         {
         cell = cells[numCell];
-        cell->midp = leaf->midp;                                  // Copy midp
+        cell->midp = leaf->midp;                                        // Copy midp
         }
     else
         {
@@ -216,19 +216,29 @@ Cell* Octree::makeCell(Leaf* leaf)
     numCell++;
     return cell;
     }
-// Recursively inserts a body into cell
-void Octree::insert(Cell* node, __m128 p, int n)
+// Prepares root for next iteration
+void Octree::makeRoot()
     {
-    short i = node->whichOct(p);
-    Node* ptr = node->subp[i];
+    numCell = 1;
+    root->midp = root->com;
+    root->com = _mm_set_ps(0.0f,0.0f,0.0f,0.0f);
+    getBoxSize();
+    for(int i = 0; i < 8; i++)
+        ((Cell*)root)->subp[i] = NULL;
+    }
+// Recursively inserts a body into cell
+void Octree::insert(Cell* cell, __m128 p, int n)
+    {
+    short i = cell->whichOct(p);
+    Node* ptr = cell->subp[i];
 
     if(ptr == NULL)                                                     // If child does not exist, create leaf and insert body into leaf.
         {
-        __m128 _side = _mm_set1_ps(node->midp[3] / 4.0f);               // Calculate midp of new leaf
-        __m128 _midp = _mm_fmadd_ps(Cell::octIdx[i], _side, node->midp);
+        __m128 _side = _mm_set1_ps(cell->midp[3] / 4.0f);               // Calculate midp of new leaf
+        __m128 _midp = _mm_fmadd_ps(Cell::octIdx[i], _side, cell->midp);
                   
         Leaf* _leaf = leaves[n];                                        // Use existing leaf in list
-        node->subp[i] = (Node*)_leaf;                                   // Append ptr to leaf in list of subpointers
+        cell->subp[i] = (Node*)_leaf;                                   // Append ptr to leaf in list of subpointers
                 
         _leaf->com = p;                                                 // Put pos and m into leaf
         _leaf->midp = _midp;
@@ -238,7 +248,7 @@ void Octree::insert(Cell* node, __m128 p, int n)
         Leaf* _leaf  = (Leaf*)ptr;
         Cell* _cell = makeCell(_leaf);
 
-        node->subp[i] = (Node*)_cell;        
+        cell->subp[i] = (Node*)_cell;        
         
         short _i = _cell->whichOct(_leaf->com);                         // Calculates suboctand of original leaf
         _cell->subp[_i] = (Node*)_leaf;
@@ -251,16 +261,16 @@ void Octree::insert(Cell* node, __m128 p, int n)
     else insert((Cell*)ptr, p, n);                                      // If child == cell, recursively insert body into child
        
     __m128 _m = _mm_set1_ps(p[3]);                                      // Set new mass & center of mass
-    __m128 m = _mm_set1_ps(node->com[3]);
+    __m128 m = _mm_set1_ps(cell->com[3]);
     __m128 M = _mm_add_ps(m, _m);
     
-    __m128 _S = _mm_mul_ps(node->com, m);
+    __m128 _S = _mm_mul_ps(cell->com, m);
     _S = _mm_fmadd_ps(p, _m, _S);
     
-    node->com = _mm_div_ps(_S, M);
-    node->com[3] = M[0];     
+    cell->com = _mm_div_ps(_S, M);
+    cell->com[3] = M[0];     
     }
-// Calls insertion function for all N bodies in p
+// Inserts all N bodies into root
 void Octree::insertMultiple()
     {
     for(int i = 0; i<N; i++)
@@ -272,10 +282,7 @@ void Octree::insertMultiple()
 // Creates new root cell and fills it with bodies
 void Octree::buildTree()
     {
-    numCell = 1;
-    root->midp  = root->com;
-    for(int i = 0; i < 8; i++) ((Cell*)root)->subp[i] = NULL;
-    getBoxSize();
+    makeRoot();
     insertMultiple();
     threadTree(root, root);
     }
