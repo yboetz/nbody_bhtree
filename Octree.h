@@ -170,7 +170,7 @@ class Octree
         void integrateNSteps(float, int);
         __m128 centreOfMomentum();
     };
-// Constructor. Sets number of bodies, opening angle, creates list with leaves & builds first tree
+// Constructor. Sets position, velocity, number of bodies, opening angle and eps squared. Initializes Cell & Leaf vectors
 Octree::Octree(float* p, float* v, int n, float th, float e2)
     {
     pos = p; 
@@ -182,7 +182,7 @@ Octree::Octree(float* p, float* v, int n, float th, float e2)
     root = new Cell(_mm_set_ps(0.0f,0.0f,0.0f,0.0f));
     root->com = root->midp;
     
-    cells.reserve((int)(1.1 * N / 2));
+    cells.reserve((int)(1.1f * ((float)N) / 2.0f));
     cells.push_back((Cell*)root);
     
     leaves.resize(N);
@@ -190,20 +190,20 @@ Octree::Octree(float* p, float* v, int n, float th, float e2)
     
     buildTree();
     }
-// Recursively deletes every node and delete leaves
+// Destructor. Deletes every cell & leaf
 Octree::~Octree()
     {
     for(int i = 0 ; i < cells.size(); i++) delete cells[i];
     for(int i = 0; i < N; i++) delete leaves[i];
     }
-// If there are enough cells in list, use one of those, if not, create new
+// Returns pointer to cell. If there are enough cells in list, use one of those, if not, create new
 Cell* Octree::makeCell(Leaf* leaf)
     {
     Cell* cell;
     if(numCell < cells.size()) 
         {
         cell = cells[numCell];
-        cell->midp = leaf->midp;                                        // Copy midp
+        cell->midp = leaf->midp;
         }
     else
         {

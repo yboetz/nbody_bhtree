@@ -64,7 +64,7 @@ class NBodyWidget(gl.GLViewWidget):
         # Set distance to origin
         self.opts['distance'] = 20
         # Opening angle
-        self.theta = np.float32(.25)
+        self.theta = np.float32(.5**2)
             
         # Create GridItems
         self.gx = gl.GLGridItem()
@@ -371,17 +371,8 @@ class NBodyWidget(gl.GLViewWidget):
             super(NBodyWidget, self).mouseMoveEvent(ev)
     
     # Makes a test, calculates energy and momentum drift after some steps
-    def testFunction(self, dt, t):              
+    def testFunction(self, dt, num):              
         print('Testing: ', end="")
-        num = 0
-        T = time()   
-        while time() - T < 2:
-            self.oct.integrateNSteps(np.float32(dt), 10)
-            num += 10;
-        T = time() - T
-        
-        num = int(num / T * 10)
-        num = num + 200 - num  % 200
         E0, J0 = self.oct.energy(), self.oct.angularMomentum()
 
         T = time()
@@ -396,8 +387,8 @@ class NBodyWidget(gl.GLViewWidget):
               %(dE, dE / E0, dJ, dJ / J0))        
     
     # Calls testFunction in separate thread
-    def test(self, dt, t):
-        self.worker = WorkerThread(self.testFunction, dt, t)
+    def test(self, dt, num):
+        self.worker = WorkerThread(self.testFunction, dt, num)
         self.worker.start()
     
 
@@ -530,7 +521,18 @@ class MainWindow(QtGui.QMainWindow):
         elif e.key() == QtCore.Qt.Key_T:
             if self.window.GLWidget.timer.isActive():
                 self.window.GLWidget.timer.stop()
-            self.window.GLWidget.test(0.01, 10)
+            
+            while True:
+                text, ok = QtGui.QInputDialog.getText(self, 'Testing', 'Enter number of cycles')
+                if text.isdigit() and ok:
+                    break
+                elif not ok:
+                    break
+            
+            if ok:
+                num = int(text)
+                self.window.GLWidget.test(0.01, num)
+
 
 if __name__ == "__main__":
     # Start Qt applicatoin
