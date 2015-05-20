@@ -64,7 +64,7 @@ class NBodyWidget(gl.GLViewWidget):
         # Set distance to origin
         self.opts['distance'] = 20
         # Opening angle
-        self.theta = np.float32(.5**2)
+        self.theta = np.float32(.5)
             
         # Create GridItems
         self.gx = gl.GLGridItem()

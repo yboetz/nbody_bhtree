@@ -120,6 +120,7 @@ class Cell: public Node
     public:
         Node* subp[8] = {NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL};       // Pointer to children
         Node* more = NULL;                                                      // Pointer to first child
+        float delta;
         
         Cell(float*, float);
         Cell(__m128);
@@ -150,7 +151,7 @@ class Octree
         int N;
         float* pos;
         float* vel;
-        float theta2;
+        float theta;
         float eps2;
 
         Octree(float*, float*, int, float, float);
@@ -176,7 +177,7 @@ Octree::Octree(float* p, float* v, int n, float th, float e2)
     pos = p; 
     vel = v;
     N = n;
-    theta2 = th;
+    theta = th;
     eps2 = e2;
         
     root = new Cell(_mm_set_ps(0.0f,0.0f,0.0f,0.0f));
@@ -268,7 +269,7 @@ void Octree::insert(Cell* cell, __m128 p, int n)
     _S = _mm_fmadd_ps(p, _m, _S);
     
     cell->com = _mm_div_ps(_S, M);
-    cell->com[3] = M[0];     
+    cell->com[3] = M[0];
     }
 // Inserts all N bodies into root
 void Octree::insertMultiple()
@@ -286,13 +287,15 @@ void Octree::buildTree()
     insertMultiple();
     threadTree(root, root);
     }
-// Threads tree for non-recursive walk
+// Threads tree for non-recursive walk. While doing also calculates distance of com to midp.
 void Octree::threadTree(Node* p, Node* n)
     {
     p->next = n;
     if(p->type == 0)
         {
         Cell* ptr = (Cell*)p;
+        ptr->delta = sqrt(dist(ptr->com, ptr->midp));               // Calculates distance between centre of mass and midpoint
+
         int ndesc = 0;
         int i;
         Node* desc[9];
@@ -339,7 +342,7 @@ float Octree::leafPot(Leaf* leaf)
     Node* node = root;
     do
         {       
-        if((node->type) || (pow((node->midp[3]),2) / dist(node->com, leaf->com) < theta2))
+        if((node->type) || (pow((node->midp[3])/theta + ((Cell*)node)->delta,2) < dist(node->com, leaf->com)))
             {
             if((Leaf*)node != leaf) 
                 p += pot(leaf->com, node->com);
@@ -409,8 +412,8 @@ __m128 Octree::leafAccel(Leaf* leaf)
     
     Node* node = root;
     do
-        {       
-        if((node->type) || (pow((node->midp[3]),2) / dist(node->com, leaf->com) < theta2))
+        {
+        if((node->type) || (pow((node->midp[3])/theta + ((Cell*)node)->delta,2) < dist(node->com, leaf->com)))
             {
             a = _mm_add_ps(a, accel(leaf->com, node->com, eps2));
             node = node->next;
