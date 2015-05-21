@@ -461,13 +461,17 @@ float Octree::angularMomentum()
 void Octree::integrate(float dt)
     {
     __m128 dtv = {dt,dt,dt,0.0f};
-    #pragma omp parallel for schedule(dynamic,32)
+    
+    #pragma omp parallel
+    {
+    std::vector<__m128> list;
+    std::vector<Leaf*> leafs;
+    
+    #pragma omp for schedule(dynamic,32)
     for(int i = 0; i < C.size(); i++)
         {
-        std::vector<__m128> list;
-        list.reserve(1000);
-        std::vector<Leaf*> leafs;
-        leafs.reserve(Ncrit);
+        list.resize(0);
+        leafs.resize(0);
         Cell* critCell = (Cell*)C[i];
         
         Node* node = root;
@@ -484,6 +488,7 @@ void Octree::integrate(float dt)
         while(node != root);
 
         node = critCell;
+        Node* end = critCell->next;
         do
             {
             if(node->type)
@@ -494,7 +499,7 @@ void Octree::integrate(float dt)
                 }
             else node = ((Cell*)node)->more;   
             }
-        while(node != critCell->next);
+        while(node != end);
 
         for(int k = 0; k < leafs.size(); k++)
             {
@@ -517,6 +522,7 @@ void Octree::integrate(float dt)
             _mm_store_ps(vel + idx, v);
             }      
         }
+    }
     buildTree();
     }
 // Calls integration function a number of times
