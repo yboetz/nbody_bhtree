@@ -2,7 +2,7 @@ import numpy as np
 cimport numpy as np
 from libcpp cimport bool
 
-cdef extern from "Octree.h":
+cdef extern from "OctreeMod.h":
     cdef cppclass Octree:
         Octree(float*, float*, int, float, float) except +
         void integrate(float)
