@@ -37,14 +37,15 @@ __m128 accel(__m128 p1, __m128 p2, float eps2)
     }      
 // Calculates potential between p1 and p2
 float pot(__m128 p1, __m128 p2)
-    {    
+    {
     __m128 d = _mm_sub_ps(p2, p1);
     d = _mm_mul_ps(d, d);
-       
-    float f = d[0] + d[1] + d[2];
-    f = p1[3] * p2[3] / sqrt(f);
+    d[3] = 0;
+    d = _mm_hadd_ps(d,d);
+    d = _mm_hadd_ps(d,d);
+    d = _mm_rsqrt_ps(d);
     
-    return f;
+    return p1[3]*p2[3]*d[0];
     }
 // Returns squared distance between p1 & p2
 float dist(__m128 p1, __m128 p2)
@@ -184,7 +185,6 @@ class Octree
         void threadTree(Node*, Node*);
         void getCrit();
         void getBoxSize();
-        float leafPot(Leaf*);
         float energy();
         float angularMomentum();
         void integrate(float);
@@ -385,46 +385,83 @@ void Octree::getBoxSize()
     
     root->midp[3] = 2*s;
     }
-// Traverses tree and calculates potential for a leaf
-float Octree::leafPot(Leaf* leaf)
-    {   
-    float p = 0.0f;
-    
-    Node* node = root;
-    do
-        {       
-        if((node->type) || (pow((node->midp[3])/theta + ((Cell*)node)->delta,2) < dist(node->com, leaf->com)))
-            {
-            if((Leaf*)node != leaf) 
-                p += pot(leaf->com, node->com);
-            node = node->next;
-            }
-        else node = ((Cell*)node)->more;   
-        }
-    while(node != root);
-    
-    return p;
-    }
 // Calculates energy of system (approximate)
 float Octree::energy()
     {
     float V = 0;
     float T = 0;
     
-    #pragma omp parallel for schedule(dynamic,100)
-    for(int i = 0; i < N; i++)
+    const int Csize = critCells.size();
+    
+    #pragma omp parallel
+    {
+    std::vector<Node*> list;
+    std::vector<Leaf*> leafs;
+    float _V = 0;
+    float _T = 0;
+    
+    #pragma omp for schedule(dynamic)
+    for(int i = 0; i < Csize; i++)
         {
-        Leaf* leaf = leaves[i];
+        list.resize(0);
+        leafs.resize(0);
+        Cell* critCell = (Cell*)critCells[i];
         
-        #pragma omp atomic
-        V += leafPot(leaf);
+        Node* node = root;
+        do
+            {
+            if(node == critCell) node = node->next;
+            else if((node->type) || (((node->midp[3])/theta + ((Cell*)node)->delta) < cdist(node->com, critCell->midp)))
+                {
+                list.push_back(node);
+                node = node->next;
+                }
+            else node = ((Cell*)node)->more;   
+            }
+        while(node != root);
+
+        node = critCell;
+        Node* end = critCell->next;
+        do
+            {
+            if(node->type)
+                {
+                list.push_back(node);
+                leafs.push_back((Leaf*)node);
+                node = node->next;
+                }
+            else node = ((Cell*)node)->more;   
+            }
+        while(node != end);
         
-        __m128 v = _mm_load_ps(vel + 4*i);
-        v = _mm_mul_ps(v,v);
+        const int leafsSize = leafs.size();
+        const int listSize = list.size();
         
-        #pragma omp atomic
-        T += (leaf->com[3]) * (v[0] + v[1] + v[2]);
+        for(int k = 0; k < leafsSize; k++)
+            {
+            Leaf* leaf = leafs[k];
+            float p = 0.0f;
+            
+            for(int j = 0; j < listSize; j++)
+                {
+                Node* _node = list[j];
+                if(leaf != ((Leaf*)_node)) p += pot(leaf->com, _node->com);
+                }
+            
+            _V += p;
+
+            __m128 v = _mm_load_ps(vel + 4*(leaf->i));
+            v = _mm_mul_ps(v,v);
+        
+            _T += (leaf->com[3]) * (v[0] + v[1] + v[2]);
+            }
         }
+    #pragma omp atomic
+    V += _V;
+    
+    #pragma omp atomic
+    T += _T;
+    }
 
     __m128 mv = centreOfMomentum();
     mv = _mm_mul_ps(mv, mv);

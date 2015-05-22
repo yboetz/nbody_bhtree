@@ -77,7 +77,7 @@ class NBodyWidget(gl.GLViewWidget):
         self.gz.translate(0, 0, -10)
                 
         # Initial read in of positions and velocity from file
-        self.read('Data/Plummer_4096')
+        self.read('Data/Plummer/Plummer_4096')
         # Initialize Octree
         self.oct = OTree(self.pos, self.vel, self.n, self.theta, self.e)
         
