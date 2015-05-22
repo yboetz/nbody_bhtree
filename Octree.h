@@ -38,11 +38,12 @@ float pot(__m128 p1, __m128 p2)
     {    
     __m128 d = _mm_sub_ps(p2, p1);
     d = _mm_mul_ps(d, d);
-       
-    float f = d[0] + d[1] + d[2];
-    f = p1[3] * p2[3] / sqrt(f);
+    d[3] = 0;
+    d = _mm_hadd_ps(d,d);
+    d = _mm_hadd_ps(d,d);
+    d = _mm_rsqrt_ps(d);
     
-    return f;
+    return p1[3]*p2[3]*d[0];
     }
 // Returns squared distance between p1 & p2
 float dist(__m128 p1, __m128 p2)
