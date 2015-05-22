@@ -55,6 +55,20 @@ float dist(__m128 p1, __m128 p2)
     return res[0] + res[1] + res[2];   
     }
 
+// Returns cooked distance between center of mass & midpoint (max norm - side/2)
+float cdist(__m128 p, __m128 midp)
+    {
+    __m128 res = _mm_sub_ps(p, midp);
+    res = _mm_andnot_ps(_mm_castsi128_ps(_mm_set1_epi32(0x80000000)), res);
+
+    float max = res[0];
+    if(max < res[1]) max = res[1];
+    if(max < res[2]) max = res[2];
+
+    return (max - (midp[3]) / 2.0f);
+    }
+
+
 // Base class for both leaf & cell. Has all the basic definitions
 class Node
     {  
@@ -143,21 +157,7 @@ Cell::Cell(__m128 mp)
     {
     type = 0;
     }
-
-
-// Returns cooked distance between p1 & p2 (max norm - side/2)
-float cdist(__m128 p, Cell* cell)
-    {
-    __m128 res = _mm_sub_ps(p, cell->midp);
-    res = _mm_andnot_ps(_mm_castsi128_ps(_mm_set1_epi32(0x80000000)), res);
-    
-    float max = res[0];
-    if(res[1] > max) max = res[1];
-    if(res[2] > max) max = res[2];
-    
-    return max - (cell->midp[3]) / 2.0f;   
-    }
-    
+       
 
 // Octree class. Contains pointer to a root cell and a list of all leaves
 class Octree
@@ -480,7 +480,7 @@ void Octree::integrate(float dt)
         do
             {
             if(node == critCell) node = node->next;
-            else if((node->type) || (((node->midp[3])/theta + ((Cell*)node)->delta) < cdist(node->com, critCell)))
+            else if((node->type) || (((node->midp[3])/theta + ((Cell*)node)->delta) < cdist(node->com, critCell->midp)))
                 {
                 list.push_back(node->com);
                 node = node->next;
