@@ -470,28 +470,3 @@ __m128 Octree::centreOfMomentum()
     
     return mv;
     }
-
-
-// Recursively traverses tree and prints out level and node
-void traverse(Node* node, int level)
-    {
-    std::cout << "Lvl " << level << ", "<< "Type = "<<((Cell*)node)->type << ", m = " << ((Cell*)node)->com[3] 
-    << ", com = (" << ((Cell*)node)->com[0] << ", " << ((Cell*)node)->com[1] << ", " << ((Cell*)node)->com[2] 
-    << "), midp = (" << ((Cell*)node)->midp[0] << ", " << ((Cell*)node)->midp[1] << ", " << ((Cell*)node)->midp[2] << "), Side = " << ((Cell*)node)->midp[3] << "\n";
-    if(node->type == 0)
-        {
-        for(int i = 0; i < 8; i++)
-            {
-            if(((Cell*)node)->subp[i] != NULL) traverse(((Cell*)node)->subp[i], level+1);
-            }
-        }
-    }
-// Print all leaves
-void prtleaves(Octree* root)
-    {
-    for(int i = 0; i < root->N; i++)
-        {
-        Leaf* ptr = root->leaves[i];
-        std::cout << "Type = "<<ptr->type << ", com = (" << ptr->com[0] << ", " << ptr->com[1] << ", " << ptr->com[2] << ")\n";
-        }
-    }
