@@ -5,7 +5,7 @@
 #include <immintrin.h>
 #include <chrono>
 
-const int Ncrit = 32;
+const int Ncrit = 64;
 
 // Calculates cross product of vectors a & b
 __m128 cross(__m128 a, __m128 b)
@@ -65,7 +65,7 @@ float cdist(__m128 p, __m128 midp)
     if(max < res[1]) max = res[1];
     if(max < res[2]) max = res[2];
 
-    return (max - (midp[3]) / 2.0f);
+    return (max - midp[3] / 2.0f);
     }
 
 
@@ -166,7 +166,7 @@ class Octree
         Node* root;
         std::vector<Leaf*> leaves;
         std::vector<Cell*> cells;
-        std::vector<Node*> C;
+        std::vector<Node*> critCells;
         int numCell;
         int N;
         float* pos;
@@ -202,8 +202,6 @@ Octree::Octree(float* p, float* v, int n, float th, float e2)
         
     root = new Cell(_mm_set_ps(0.0f,0.0f,0.0f,0.0f));
     root->com = root->midp;
-    
-    cells.reserve((int)(1.1f * ((float)N) / 2.0f));
     cells.push_back((Cell*)root);
     
     leaves.resize(N);
@@ -259,14 +257,14 @@ void Octree::insert(Cell* cell, __m128 p, int n)
     if(ptr == NULL)                                                     // If child does not exist, create leaf and insert body into leaf.
         {
         __m128 _side = _mm_set1_ps(cell->midp[3] / 4.0f);               // Calculate midp of new leaf
-        __m128 _midp = _mm_fmadd_ps(Cell::octIdx[i], _side, cell->midp);
+        __m128 _midp = _mm_fmadd_ps(Node::octIdx[i], _side, cell->midp);
                   
         Leaf* _leaf = leaves[n];                                        // Use existing leaf in list
         cell->subp[i] = (Node*)_leaf;                                   // Append ptr to leaf in list of subpointers
                 
         _leaf->com = p;                                                 // Put pos and m into leaf
         _leaf->midp = _midp;
-        _leaf->i = n;
+        _leaf->i = n;                                                   // Leaf corresponds to n-th particle
         }
     else if(ptr->type)                                                  // If child == leaf, create new cell in place of leaf and insert both bodies in cell
         {
@@ -275,12 +273,12 @@ void Octree::insert(Cell* cell, __m128 p, int n)
 
         cell->subp[i] = (Node*)_cell;       
         
-        short _i = _cell->whichOct(_leaf->com);                         // Calculates suboctand of original leaf
+        short _i = _cell->whichOct(_leaf->com);                         // Calculates suboctant of original leaf in _cell
         _cell->subp[_i] = (Node*)_leaf;
         (_cell->n)++; 
 
         __m128 _side = _mm_set1_ps(_cell->midp[3] / 4.0f);              // Set parameters of leaf
-        _leaf->midp = _mm_fmadd_ps(Cell::octIdx[_i], _side, _leaf->midp);  
+        _leaf->midp = _mm_fmadd_ps(Node::octIdx[_i], _side, _leaf->midp);  
         
         insert(_cell, p, n);      
         }
@@ -347,7 +345,7 @@ void Octree::threadTree(Node* p, Node* n)
 // Finds cells with less than Ncrit bodies and appends them to global list C
 void Octree::getCrit()
     {
-    C.resize(0);
+    critCells.resize(0);
     Node* node = root;
     do
         {       
@@ -357,13 +355,13 @@ void Octree::getCrit()
                 node = ((Cell*)node)->more;
             else 
                 {
-                C.push_back(node);
+                critCells.push_back(node);
                 node = node->next;
                 } 
             }
         else 
             {
-            C.push_back(node);
+            critCells.push_back(node);
             node = node->next;
             }
         }
@@ -462,7 +460,7 @@ float Octree::angularMomentum()
 void Octree::integrate(float dt)
     {
     __m128 dtv = {dt,dt,dt,0.0f};
-    const int Csize = C.size();
+    const int Csize = critCells.size();
     
     #pragma omp parallel
     {
@@ -474,7 +472,7 @@ void Octree::integrate(float dt)
         {
         list.resize(0);
         leafs.resize(0);
-        Cell* critCell = (Cell*)C[i];
+        Cell* critCell = (Cell*)critCells[i];
         
         Node* node = root;
         do
