@@ -214,7 +214,8 @@ Octree::Octree(float* p, float* v, int n, float th, float e2)
 // Destructor. Deletes every cell & leaf
 Octree::~Octree()
     {
-    for(int i = 0 ; i < cells.size(); i++) delete cells[i];
+    const int cellsSize = cells.size();
+    for(int i = 0 ; i < cellsSize; i++) delete cells[i];
     for(int i = 0; i < N; i++) delete leaves[i];
     }
 // Returns pointer to cell. If there are enough cells in list, use one of those, if not, create new
@@ -461,14 +462,15 @@ float Octree::angularMomentum()
 void Octree::integrate(float dt)
     {
     __m128 dtv = {dt,dt,dt,0.0f};
+    const int Csize = C.size();
     
     #pragma omp parallel
     {
     std::vector<__m128> list;
     std::vector<Leaf*> leafs;
     
-    #pragma omp for schedule(dynamic,32)
-    for(int i = 0; i < C.size(); i++)
+    #pragma omp for schedule(dynamic)
+    for(int i = 0; i < Csize; i++)
         {
         list.resize(0);
         leafs.resize(0);
@@ -500,13 +502,16 @@ void Octree::integrate(float dt)
             else node = ((Cell*)node)->more;   
             }
         while(node != end);
-
-        for(int k = 0; k < leafs.size(); k++)
+        
+        const int leafsSize = leafs.size();
+        const int listSize = list.size();
+        
+        for(int k = 0; k < leafsSize; k++)
             {
             Leaf* leaf = leafs[k];
             __m128 a = {0.0f,0.0f,0.0f,0.0f};
             
-            for(int j = 0; j < list.size(); j++)
+            for(int j = 0; j < listSize; j++)
                 {
                 a = _mm_add_ps(a, accel(leaf->com, list[j], eps2));
                 }
