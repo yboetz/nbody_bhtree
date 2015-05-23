@@ -11,6 +11,7 @@ cdef extern from "OctreeMod.h":
         float angularMomentum()
         void updateColors(float*)
         void updateLineColors(float*, float*, int)
+        void updateLineData(float*, int)
    
 
 cdef class OTree:
@@ -39,3 +40,6 @@ cdef class OTree:
     
     def updateLineColors(self, np.ndarray[np.float32_t, ndim=2, mode="c"] col, np.ndarray[np.float32_t, ndim=3, mode="c"] linecol, int length):
         return self.thisptr.updateLineColors(&col[0,0], &linecol[0,0,0], length)
+    
+    def updateLineData(self, np.ndarray[np.float32_t, ndim=3, mode="c"] linedata, int length):
+        return self.thisptr.updateLineData(&linedata[0,0,0], length)

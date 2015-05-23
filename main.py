@@ -110,9 +110,8 @@ class NBodyWidget(gl.GLViewWidget):
     
     # Updates GLLinePlotItem data
     def updateLinePlot(self):
-        self.lineData = np.roll(self.lineData, 1, axis = 1)
-        self.lineData[:,0,:] = self.pos.reshape((self.n,4))[:,0:3]
-        self.lp.setData(pos = self.lineData, color = self.lineColors, antialias = True)
+        self.oct.updateLineData(self.lineData, self.lineLength)
+        self.lp.setData(pos = self.lineData, color = self.lineColors, antialias = True)      
         
     # Deletes GLLinePlotItem for new data read in
     def delLinePlot(self):
@@ -134,12 +133,12 @@ class NBodyWidget(gl.GLViewWidget):
             length *= 2
             if self.lp in self.items:
                 if length <= self.lineLength:
-                    self.lineData = self.lineData[:,:length,:]
+                    self.lineData = np.array(self.lineData[:,:length,:], dtype=np.float32)
                     if np.array(self.lineColors).size > 4:
                         self.lineColors = np.array(self.lineColors[:,:length,:], dtype=np.float32)
                 else:
-                    self.lineData = np.pad(self.lineData, ((0,0),(0,length-self.lineLength),(0,0)), 
-                                           'edge')
+                    self.lineData = np.array(np.pad(self.lineData, ((0,0),(0,length-self.lineLength),(0,0)),
+                                           'edge'), dtype=np.float32)
                     if np.array(self.lineColors).size > 4:
                         self.lineColors = np.array(np.pad(self.lineColors, ((0,0),(0,length-self.lineLength),(0,0)), 
                                                  'edge'), dtype=np.float32)

@@ -192,6 +192,7 @@ class Octree
         __m128 centreOfMomentum();
         void updateColors(float*);
         void updateLineColors(float*, float*, int);
+        void updateLineData(float*, int);
     };
 // Constructor. Sets position, velocity, number of bodies, opening angle and eps squared. Initializes Cell & Leaf vectors
 Octree::Octree(float* p, float* v, int n, float th, float e2)
@@ -626,5 +627,21 @@ void Octree::updateLineColors(float* col, float* linecol, int length)
             }
         int idx = 4*i;
         _mm_store_ps(linecol + idx*length, _mm_load_ps(col + idx));
+        }
+    }
+// Takes array of linedata as argument and updates
+void Octree::updateLineData(float* linedata, int length)
+    {
+    __m128i mask = _mm_set_epi32(0,-0x7fffffff,-0x7fffffff,-0x7fffffff);
+    for(int i = 0; i < N; i++)
+        {
+        for(int j = length-2; j > -1; j--)
+            {
+            float* idx = linedata + 3*(i*length + j);
+            __m128 p = _mm_loadu_ps(idx);
+            _mm_maskstore_ps(idx + 3, mask, p);
+            }
+        __m128 p = _mm_load_ps(pos + 4*i);
+        _mm_maskstore_ps(linedata + 3*i*length, mask, p);
         }
     }
