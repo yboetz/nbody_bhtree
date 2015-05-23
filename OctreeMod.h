@@ -169,13 +169,13 @@ class Octree
         std::vector<Node*> critCells;
         int numCell;
         int N;
-        const int Ncrit = 64;
+        int Ncrit;
         float* pos;
         float* vel;
         float theta;
         float eps2;
 
-        Octree(float*, float*, int, float, float);
+        Octree(float*, float*, int, int, float, float);
         ~Octree();
         Cell* makeCell(Leaf*);
         void makeRoot();
@@ -195,11 +195,12 @@ class Octree
         void updateLineData(float*, int);
     };
 // Constructor. Sets position, velocity, number of bodies, opening angle and eps squared. Initializes Cell & Leaf vectors
-Octree::Octree(float* p, float* v, int n, float th, float e2)
+Octree::Octree(float* p, float* v, int n,  int ncrit, float th, float e2)
     {
     pos = p; 
     vel = v;
     N = n;
+    Ncrit = ncrit;
     theta = th;
     eps2 = e2;
         

@@ -4,7 +4,7 @@ from libcpp cimport bool
 
 cdef extern from "OctreeMod.h":
     cdef cppclass Octree:
-        Octree(float*, float*, int, float, float) except +
+        Octree(float*, float*, int, int, float, float) except +
         void integrate(float)
         void integrateNSteps(float, int)
         float energy()
@@ -17,8 +17,8 @@ cdef extern from "OctreeMod.h":
 cdef class OTree:
     cdef Octree *thisptr
     
-    def __cinit__(self, np.ndarray[np.float32_t, ndim=1, mode="c"] pos, np.ndarray[np.float32_t, ndim=1, mode="c"] vel, int n, np.float32_t th, np.float32_t eps2):
-        self.thisptr = new Octree (&pos[0], &vel[0], n, th, eps2)
+    def __cinit__(self, np.ndarray[np.float32_t, ndim=1, mode="c"] pos, np.ndarray[np.float32_t, ndim=1, mode="c"] vel, int n, int ncrit, np.float32_t th, np.float32_t eps2):
+        self.thisptr = new Octree (&pos[0], &vel[0], n, ncrit, th, eps2)
         
     def __dealloc__(self):
         del self.thisptr

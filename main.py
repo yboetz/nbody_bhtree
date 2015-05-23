@@ -50,6 +50,8 @@ class NBodyWidget(gl.GLViewWidget):
         self.opts['distance'] = 20
         # Opening angle
         self.theta = np.float32(.5)
+        # Max number of bodies per critical cell
+        self.Ncrit = 64
             
         # Create GridItems
         self.gx = gl.GLGridItem()
@@ -64,7 +66,7 @@ class NBodyWidget(gl.GLViewWidget):
         # Initial read in of positions and velocity from file
         self.read('Data/Plummer/Plummer_4096')
         # Initialize Octree
-        self.oct = OTree(self.pos, self.vel, self.n, self.theta, self.e)
+        self.oct = OTree(self.pos, self.vel, self.n, self.Ncrit, self.theta, self.e)
         
         # Create variable for GLLinePlotItem
         self.lp = None
@@ -273,7 +275,7 @@ class NBodyWidget(gl.GLViewWidget):
         try:
             self.read(path)
             del self.oct
-            self.oct = OTree(self.pos, self.vel, self.n, self.theta, self.e)
+            self.oct = OTree(self.pos, self.vel, self.n, self.Ncrit, self.theta, self.e)
             self.delLinePlot()
             self.resetColors()
             self.setSize(self.size)
