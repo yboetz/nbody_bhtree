@@ -9,6 +9,8 @@ cdef extern from "OctreeMod.h":
         void integrateNSteps(float, int)
         float energy()
         float angularMomentum()
+        void updateColors(float*)
+        void updateLineColors(float*, float*, int)
    
 
 cdef class OTree:
@@ -31,3 +33,9 @@ cdef class OTree:
     
     def angularMomentum(self):
         return self.thisptr.angularMomentum()
+    
+    def updateColors(self, np.ndarray[np.float32_t, ndim=2, mode="c"] col):
+        return self.thisptr.updateColors(&col[0,0])
+    
+    def updateLineColors(self, np.ndarray[np.float32_t, ndim=2, mode="c"] col, np.ndarray[np.float32_t, ndim=3, mode="c"] linecol, int length):
+        return self.thisptr.updateLineColors(&col[0,0], &linecol[0,0,0], length)

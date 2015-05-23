@@ -5,7 +5,6 @@
 #include <immintrin.h>
 #include <chrono>
 
-const int Ncrit = 64;
 
 // Calculates cross product of vectors a & b
 __m128 cross(__m128 a, __m128 b)
@@ -170,6 +169,7 @@ class Octree
         std::vector<Node*> critCells;
         int numCell;
         int N;
+        const int Ncrit = 64;
         float* pos;
         float* vel;
         float theta;
@@ -190,6 +190,8 @@ class Octree
         void integrate(float);
         void integrateNSteps(float, int);
         __m128 centreOfMomentum();
+        void updateColors(float*);
+        void updateLineColors(float*, float*, int);
     };
 // Constructor. Sets position, velocity, number of bodies, opening angle and eps squared. Initializes Cell & Leaf vectors
 Octree::Octree(float* p, float* v, int n, float th, float e2)
@@ -589,4 +591,40 @@ __m128 Octree::centreOfMomentum()
     mv = _mm_div_ps(mv, _mm_set1_ps(root->com[3]));
     
     return mv;
+    }
+// Takes array of colors as argument and updates them
+void Octree::updateColors(float* col)
+    {
+    __m128 one = _mm_set1_ps(1.1f);
+    __m128 two = _mm_set1_ps(2.1f);
+    for(int i = 0; i < N; i++)
+        {
+        int idx = 4*i;
+        __m128 v = _mm_load_ps(vel + idx);
+        __m128 _v = v;
+        v = _mm_mul_ps(v,v);
+        v = _mm_hadd_ps(v,v);
+        v = _mm_hadd_ps(v,v);
+        v = _mm_rsqrt_ps(v);
+
+        v = _mm_fmadd_ps(_v,v,one);
+        v = _mm_div_ps(v,two);
+        v[3] = 1.0f;
+
+        _mm_store_ps(col + idx, v);
+        }
+    }
+// Takes array of linecolors and colors as argument and updates linecolors
+void Octree::updateLineColors(float* col, float* linecol, int length)
+    {
+    for(int i = 0; i < N; i++)
+        {
+        for(int j = length-2; j > -1; j--)
+            {
+            int idx = 4*(i*length + j);
+            _mm_store_ps(linecol + idx + 4, _mm_load_ps(linecol + idx));
+            }
+        int idx = 4*i;
+        _mm_store_ps(linecol + idx*length, _mm_load_ps(col + idx));
+        }
     }

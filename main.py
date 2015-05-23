@@ -11,22 +11,7 @@ import pyqtgraph.opengl as gl
 from pyqtgraph.Qt import QtCore, QtGui
 import pyqtgraph as pg
 from time import time
-#import os
-#os.environ['PYOPENCL_COMPILER_OUTPUT'] = '1'
-from numba import jit, void, i4, f4
 
-# Function to roll the array self.lineColors by 1.
-@jit(void(f4[:,:,:], i4, i4), nopython = True)
-def rollLineColor(a, x, y):
-    """Only use to roll the array self.lineColors. This function is faster than np.roll, 
-    but can only be used in this special case. Will segfault if the shape is not
-    given correctly."""
-    for i in range(x):
-        for j in range(y-1,0,-1):
-            a[i,j,0] = a[i,j-1,0]
-            a[i,j,1] = a[i,j-1,1]
-            a[i,j,2] = a[i,j-1,2]
-            a[i,j,3] = a[i,j-1,3]
 
 # Generic thread which takes a function and its arguments and runs it
 class WorkerThread(QtCore.QThread):
@@ -151,13 +136,13 @@ class NBodyWidget(gl.GLViewWidget):
                 if length <= self.lineLength:
                     self.lineData = self.lineData[:,:length,:]
                     if np.array(self.lineColors).size > 4:
-                        self.lineColors = self.lineColors[:,:length,:]
+                        self.lineColors = np.array(self.lineColors[:,:length,:], dtype=np.float32)
                 else:
                     self.lineData = np.pad(self.lineData, ((0,0),(0,length-self.lineLength),(0,0)), 
                                            'edge')
                     if np.array(self.lineColors).size > 4:
-                        self.lineColors = np.pad(self.lineColors, ((0,0),(0,length-self.lineLength),(0,0)), 
-                                                 'edge')
+                        self.lineColors = np.array(np.pad(self.lineColors, ((0,0),(0,length-self.lineLength),(0,0)), 
+                                                 'edge'), dtype=np.float32)
             self.lineLength = length
         except Exception as error:
             print(error)
@@ -203,7 +188,7 @@ class NBodyWidget(gl.GLViewWidget):
             if np.array(self.lineColors).size > 4:
                 self.toggleLineColors()
         else:
-            self.colors = np.ones((self.n, 4))
+            self.colors = np.ones((self.n, 4), dtype = np.float32)
             self.updateColors()
             self.timer.timeout.connect(self.updateColors)
             self.sp.setGLOptions('translucent')
@@ -229,16 +214,11 @@ class NBodyWidget(gl.GLViewWidget):
     
     # Update dot color depending of current direction of travel
     def updateColors(self):
-        vel = self.vel.reshape((self.n,4))[:,0:3]
-        tmp = np.sqrt(np.sum(vel * vel, axis = 1))
-        self.colors[:,0:3] = (vel[:,:] / tmp[:,None] + 1.1) / 2.1
-        self.colors[:,3] = 1
+        self.oct.updateColors(self.colors)
         
     # Update line colors with color at current position
     def updateLineColors(self):
-#        self.lineColors = np.roll(self.lineColors, 1, axis = 1)
-        rollLineColor(self.lineColors, self.n, self.lineLength)
-        self.lineColors[:,0,:] = self.colors[:,:]
+        self.oct.updateLineColors(self.colors, self.lineColors, self.lineLength)
     
     # Resets colors
     def resetColors(self):
