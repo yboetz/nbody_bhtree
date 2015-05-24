@@ -33,7 +33,28 @@ __m128 accel(__m128 p1, __m128 p2, float eps2)
     a = _mm_mul_ps(f, a);
     
     return a;
-    }      
+    }
+// Calculates acceleration on p by two points in p2
+__m128 accel(__m128 p1, __m256 p2, float eps2)
+    {
+    __m256 a = _mm256_insertf128_ps(_mm256_castps128_ps256(p1), p1, 1);
+    a = _mm256_sub_ps(p2,a);
+
+    __m256 m = _mm256_insertf128_ps(_mm256_set1_ps(p2[3]),_mm_set1_ps(p2[7]),1);
+
+    __m256 f = _mm256_mul_ps(a,a);
+    f[3] = eps2; f[7] = eps2;
+    f = _mm256_hadd_ps(f,f);
+    f = _mm256_hadd_ps(f,f);
+
+    f = f*f*f;
+    f = _mm256_rsqrt_ps(f);
+    f = _mm256_mul_ps(m, f);
+    a = _mm256_mul_ps(f, a);
+
+    __m128 res = _mm_add_ps(_mm256_extractf128_ps(a,0), _mm256_extractf128_ps(a,1));
+    return res;
+    }
 // Calculates potential between p1 and p2
 float pot(__m128 p1, __m128 p2)
     {
@@ -543,8 +564,14 @@ void Octree::integrate(float dt)
         while(node != end);
         
         const int leafsSize = leafs.size();
-        const int listSize = list.size();
-        
+        int listSize = list.size();
+        if(listSize % 2 != 0)
+            {
+            list.push_back(_mm_set1_ps(0.0f));
+            listSize++;
+            }
+        listSize/=2;
+
         for(int k = 0; k < leafsSize; k++)
             {
             Leaf* leaf = leafs[k];
@@ -552,9 +579,10 @@ void Octree::integrate(float dt)
             
             for(int j = 0; j < listSize; j++)
                 {
-                a = _mm_add_ps(a, accel(leaf->com, list[j], eps2));
+                __m256 _p = _mm256_insertf128_ps(_mm256_castps128_ps256(list[2*j]), list[2*j+1], 1);
+                a = _mm_add_ps(a, accel(leaf->com, _p, eps2));
                 }
-            
+
             int idx = 4*(leaf->i);
             __m128 p = _mm_load_ps(pos + idx);
             __m128 v = _mm_load_ps(vel + idx);
@@ -564,7 +592,7 @@ void Octree::integrate(float dt)
                    
             _mm_store_ps(pos + idx, p);
             _mm_store_ps(vel + idx, v);
-            }      
+            }
         }
     }
     buildTree();
