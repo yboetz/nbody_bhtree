@@ -15,31 +15,10 @@ __m128 cross(__m128 a, __m128 b)
                             );
     return _mm_shuffle_ps(res, res, _MM_SHUFFLE(3, 0, 2, 1 ));
     }
-// Calculates acceleration between p1 and p2
-__m128 accel(__m128 p1, __m128 p2, float eps2)
-    {   
-    __m128 a = _mm_sub_ps(p2, p1);
-    __m128 m2 = _mm_set1_ps(p2[3]);
-    
-    __m128 f = _mm_mul_ps(a, a);
-    
-    f[3] = eps2;
-    f = _mm_hadd_ps(f,f);
-    f = _mm_hadd_ps(f,f);
-   
-    f = f*f*f;
-    f = _mm_rsqrt_ps(f);
-    f = _mm_mul_ps(m2, f);
-    a = _mm_mul_ps(f, a);
-    
-    return a;
-    }
-// Calculates acceleration on p by two points in p2
-__m128 accel(__m128 p1, __m256 p2, float eps2)
+// Calculates acceleration on p1 by two points in p2
+__m128 accel(__m256 p1, __m256 p2, float eps2)
     {
-    __m256 a = _mm256_insertf128_ps(_mm256_castps128_ps256(p1), p1, 1);
-    a = _mm256_sub_ps(p2,a);
-
+    __m256 a = _mm256_sub_ps(p2,p1);
     __m256 m = _mm256_insertf128_ps(_mm256_set1_ps(p2[3]),_mm_set1_ps(p2[7]),1);
 
     __m256 f = _mm256_mul_ps(a,a);
@@ -576,11 +555,12 @@ void Octree::integrate(float dt)
             {
             Leaf* leaf = leafs[k];
             __m128 a = {0.0f,0.0f,0.0f,0.0f};
+            __m256 _p1 = _mm256_insertf128_ps(_mm256_castps128_ps256(leaf->com), leaf->com, 1);
             
             for(int j = 0; j < listSize; j++)
                 {
-                __m256 _p = _mm256_insertf128_ps(_mm256_castps128_ps256(list[2*j]), list[2*j+1], 1);
-                a = _mm_add_ps(a, accel(leaf->com, _p, eps2));
+                __m256 _p2 = _mm256_insertf128_ps(_mm256_castps128_ps256(list[2*j]), list[2*j+1], 1);
+                a = _mm_add_ps(a, accel(_p1, _p2, eps2));
                 }
 
             int idx = 4*(leaf->i);
