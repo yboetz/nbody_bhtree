@@ -1,10 +1,10 @@
 #include <iostream>
 #include <math.h>
 #include <vector>
-#include <xmmintrin.h>
 #include <immintrin.h>
 #include <chrono>
 
+#define _mm256_set_m128(va, vb) _mm256_insertf128_ps(_mm256_castps128_ps256(va), vb, 1)
 
 // Calculates cross product of vectors a & b
 __m128 cross(__m128 a, __m128 b)
@@ -19,7 +19,7 @@ __m128 cross(__m128 a, __m128 b)
 __m128 accel(__m256 p1, __m256 p2, float eps2)
     {
     __m256 a = _mm256_sub_ps(p2,p1);
-    __m256 m = _mm256_insertf128_ps(_mm256_set1_ps(p2[3]),_mm_set1_ps(p2[7]),1);
+    __m256 m = _mm256_set_m128(_mm_set1_ps(p2[3]),_mm_set1_ps(p2[7]));
 
     __m256 f = _mm256_mul_ps(a,a);
     f[3] = eps2; f[7] = eps2;
@@ -31,8 +31,8 @@ __m128 accel(__m256 p1, __m256 p2, float eps2)
     f = _mm256_mul_ps(m, f);
     a = _mm256_mul_ps(f, a);
 
-    __m128 res = _mm_add_ps(_mm256_extractf128_ps(a,0), _mm256_extractf128_ps(a,1));
-    return res;
+    a = _mm256_add_ps(a,_mm256_permute2f128_ps(a,a,1));
+    return _mm256_castps256_ps128(a);
     }
 // Calculates potential between p1 and p2
 float pot(__m128 p1, __m128 p2)
@@ -60,12 +60,11 @@ float cdist(__m128 p, __m128 midp)
     {
     __m128 res = _mm_sub_ps(p, midp);
     res = _mm_andnot_ps(_mm_castsi128_ps(_mm_set1_epi32(0x80000000)), res);
+    res = _mm_max_ps(res, _mm_permute_ps(res,_MM_SHUFFLE(3,1,0,2)));
+    res = _mm_max_ps(res, _mm_permute_ps(res,_MM_SHUFFLE(3,1,0,2)));
+    res = _mm_fmadd_ps(_mm_set1_ps(-0.5f), _mm_set1_ps(midp[3]), res);
 
-    float max = res[0];
-    if(max < res[1]) max = res[1];
-    if(max < res[2]) max = res[2];
-
-    return (max - midp[3] / 2.0f);
+    return res[0];
     }
 
 
@@ -383,11 +382,11 @@ void Octree::getBoxSize()
         p = _mm_andnot_ps(_mm_castsi128_ps(_mm_set1_epi32(0x80000000)), p); // Absolute value
         side = _mm_max_ps(side,p);      
         }
-    float s = side[0];
-    if(s < side[1]) s = side[1];
-    if(s < side[2]) s = side[2];
+
+    side = _mm_max_ps(side, _mm_permute_ps(side,_MM_SHUFFLE(3,1,0,2)));
+    side = _mm_max_ps(side, _mm_permute_ps(side,_MM_SHUFFLE(3,1,0,2)));
     
-    root->midp[3] = 2*s;
+    root->midp[3] = 2*side[0];
     }
 // Calculates energy of system (approximate)
 float Octree::energy()
@@ -555,11 +554,11 @@ void Octree::integrate(float dt)
             {
             Leaf* leaf = leafs[k];
             __m128 a = {0.0f,0.0f,0.0f,0.0f};
-            __m256 _p1 = _mm256_insertf128_ps(_mm256_castps128_ps256(leaf->com), leaf->com, 1);
+            __m256 _p1 = _mm256_set_m128(leaf->com,leaf->com);
             
             for(int j = 0; j < listSize; j++)
                 {
-                __m256 _p2 = _mm256_insertf128_ps(_mm256_castps128_ps256(list[2*j]), list[2*j+1], 1);
+                __m256 _p2 = _mm256_set_m128(list[2*j], list[2*j+1]);
                 a = _mm_add_ps(a, accel(_p1, _p2, eps2));
                 }
 
@@ -581,9 +580,7 @@ void Octree::integrate(float dt)
 void Octree::integrateNSteps(float dt, int n)
     {
     for(int i = 0; i < n; i++)
-        {
         integrate(dt);
-        }
     }
 // Returns centre of momentum
 __m128 Octree::centreOfMomentum()
@@ -612,12 +609,12 @@ void Octree::updateColors(float* col)
         int idx = 4*i;
         __m128 v = _mm_load_ps(vel + idx);
         __m128 _v = v;
-        v = _mm_mul_ps(v,v);
-        v = _mm_hadd_ps(v,v);
-        v = _mm_hadd_ps(v,v);
-        v = _mm_rsqrt_ps(v);
+        _v = _mm_mul_ps(_v,_v);
+        _v = _mm_hadd_ps(_v,_v);
+        _v = _mm_hadd_ps(_v,_v);
+        _v = _mm_rsqrt_ps(_v);
 
-        v = _mm_fmadd_ps(_v,v,one);
+        v = _mm_fmadd_ps(v,_v,one);
         v = _mm_div_ps(v,two);
         v[3] = 1.0f;
 
