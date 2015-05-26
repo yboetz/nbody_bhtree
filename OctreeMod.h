@@ -28,8 +28,8 @@ __m128 accel(__m256 p1, __m256 p2, float eps2)
 
     f = f*f*f;
     f = _mm256_rsqrt_ps(f);
-    f = _mm256_mul_ps(m, f);
-    a = _mm256_mul_ps(f, a);
+    f = _mm256_mul_ps(m,f);
+    a = _mm256_mul_ps(f,a);
 
     a = _mm256_add_ps(a,_mm256_permute2f128_ps(a,a,1));
     return _mm256_castps256_ps128(a);
@@ -54,7 +54,6 @@ float dist(__m128 p1, __m128 p2)
     
     return res[0] + res[1] + res[2];   
     }
-
 // Returns cooked distance between center of mass & midpoint (max norm - side/2)
 float cdist(__m128 p, __m128 midp)
     {
@@ -496,7 +495,7 @@ float Octree::angularMomentum()
 
     return sqrt(J[0] + J[1] + J[2]);
     }
-// Finds acceleration for every leaf and updates pos & vel via semi-implizit Euler integration
+// Finds acceleration for every leaf and updates pos & vel via semi-implicit Euler integration
 void Octree::integrate(float dt)
     {
     __m128 dtv = {dt,dt,dt,0.0f};
@@ -505,7 +504,7 @@ void Octree::integrate(float dt)
     #pragma omp parallel
     {
     std::vector<__m128> list;
-    std::vector<Leaf*> leafs;
+    std::vector<int> leafs;
     
     #pragma omp for schedule(dynamic)
     for(int i = 0; i < Csize; i++)
@@ -513,7 +512,7 @@ void Octree::integrate(float dt)
         list.resize(0);
         leafs.resize(0);
         Cell* critCell = (Cell*)critCells[i];
-        
+        // Finds all cells outside critical cell which satisfy opening angle criterion and appends them to interaction list
         Node* node = root;
         do
             {
@@ -526,7 +525,7 @@ void Octree::integrate(float dt)
             else node = ((Cell*)node)->more;   
             }
         while(node != root);
-
+        // Adds all leafs within critical cell to list
         node = critCell;
         Node* end = critCell->next;
         do
@@ -534,13 +533,13 @@ void Octree::integrate(float dt)
             if(node->type)
                 {
                 list.push_back(node->com);
-                leafs.push_back((Leaf*)node);
+                leafs.push_back(((Leaf*)node)->i);
                 node = node->next;
                 }
             else node = ((Cell*)node)->more;   
             }
         while(node != end);
-        
+        // If list is not __m256 aligned, adds another zero __m128 vector
         const int leafsSize = leafs.size();
         int listSize = list.size();
         if(listSize % 2 != 0)
@@ -549,28 +548,30 @@ void Octree::integrate(float dt)
             listSize++;
             }
         listSize/=2;
+        float* lptr = (float*)&list[0];
 
         for(int k = 0; k < leafsSize; k++)
             {
-            Leaf* leaf = leafs[k];
+            int idx = 4*(leafs[k]);
+            __m128 p = _mm_load_ps(pos + idx);
+            __m128 v = _mm_load_ps(vel + idx);
             __m128 a = {0.0f,0.0f,0.0f,0.0f};
-            __m256 _p1 = _mm256_set_m128(leaf->com,leaf->com);
+            __m256 _p1 = _mm256_set_m128(p,p);
             
             for(int j = 0; j < listSize; j++)
                 {
-                __m256 _p2 = _mm256_set_m128(list[2*j], list[2*j+1]);
+                __m256 _p2 = _mm256_loadu_ps(lptr);
                 a = _mm_add_ps(a, accel(_p1, _p2, eps2));
+                lptr += 8;
                 }
 
-            int idx = 4*(leaf->i);
-            __m128 p = _mm_load_ps(pos + idx);
-            __m128 v = _mm_load_ps(vel + idx);
-            
             v = _mm_fmadd_ps(dtv, a, v);
             p = _mm_fmadd_ps(dtv, v, p);
-                   
+
             _mm_store_ps(pos + idx, p);
             _mm_store_ps(vel + idx, v);
+
+            lptr -= 8*listSize;
             }
         }
     }
