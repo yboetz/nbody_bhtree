@@ -408,12 +408,11 @@ float Octree::energy()
         list.resize(0);
         leafs.resize(0);
         Cell* critCell = (Cell*)critCells[i];
-        
+        // Finds all cells outside critical cell which satisfy opening angle criterion and appends them to interaction list
         Node* node = root;
         do
             {
-            if(node == critCell) node = node->next;
-            else if((node->type) || (((node->midp[3])/theta + ((Cell*)node)->delta) < cdist(node->com, critCell->midp)))
+            if((node->type) || (((node->midp[3])/theta + ((Cell*)node)->delta) < cdist(node->com, critCell->midp)))
                 {
                 list.push_back(node);
                 node = node->next;
@@ -421,14 +420,13 @@ float Octree::energy()
             else node = ((Cell*)node)->more;   
             }
         while(node != root);
-
+        // Adds all leafs within critical cell to list
         node = critCell;
         Node* end = critCell->next;
         do
             {
             if(node->type)
                 {
-                list.push_back(node);
                 leafs.push_back((Leaf*)node);
                 node = node->next;
                 }
@@ -438,7 +436,7 @@ float Octree::energy()
         
         const int leafsSize = leafs.size();
         const int listSize = list.size();
-        
+        // For each leaf in list, calculate the energy by summing over all bodies in interaction list
         for(int k = 0; k < leafsSize; k++)
             {
             Leaf* leaf = leafs[k];
@@ -516,8 +514,7 @@ void Octree::integrate(float dt)
         Node* node = root;
         do
             {
-            if(node == critCell) node = node->next;
-            else if((node->type) || (((node->midp[3])/theta + ((Cell*)node)->delta) < cdist(node->com, critCell->midp)))
+            if((node->type) || (((node->midp[3])/theta + ((Cell*)node)->delta) < cdist(node->com, critCell->midp)))
                 {
                 list.push_back(node->com);
                 node = node->next;
@@ -532,16 +529,16 @@ void Octree::integrate(float dt)
             {
             if(node->type)
                 {
-                list.push_back(node->com);
                 leafs.push_back(((Leaf*)node)->i);
                 node = node->next;
                 }
             else node = ((Cell*)node)->more;   
             }
         while(node != end);
-        // If list is not __m256 aligned, adds another zero __m128 vector
+
         const int leafsSize = leafs.size();
         int listSize = list.size();
+        // If list is not __m256 aligned, adds another zero __m128 vector
         if(listSize % 2 != 0)
             {
             list.push_back(_mm_set1_ps(0.0f));
@@ -549,7 +546,7 @@ void Octree::integrate(float dt)
             }
         listSize/=2;
         float* lptr = (float*)&list[0];
-
+        // For each leaf in list, calculate the acceleration by summing over all bodies in interaction list
         for(int k = 0; k < leafsSize; k++)
             {
             int idx = 4*(leafs[k]);
