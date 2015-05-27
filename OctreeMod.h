@@ -502,13 +502,11 @@ void Octree::integrate(float dt)
     #pragma omp parallel
     {
     std::vector<__m128> list;
-    std::vector<int> leafs;
     
     #pragma omp for schedule(dynamic)
     for(int i = 0; i < Csize; i++)
         {
         list.resize(0);
-        leafs.resize(0);
         Cell* critCell = (Cell*)critCells[i];
         // Finds all cells outside critical cell which satisfy opening angle criterion and appends them to interaction list
         Node* node = root;
@@ -522,23 +520,9 @@ void Octree::integrate(float dt)
             else node = ((Cell*)node)->more;   
             }
         while(node != root);
-        // Adds all leafs within critical cell to list
-        node = critCell;
-        Node* end = critCell->next;
-        do
-            {
-            if(node->type)
-                {
-                leafs.push_back(((Leaf*)node)->i);
-                node = node->next;
-                }
-            else node = ((Cell*)node)->more;   
-            }
-        while(node != end);
 
-        const int leafsSize = leafs.size();
-        int listSize = list.size();
         // If list is not __m256 aligned, adds another zero __m128 vector
+        int listSize = list.size();
         if(listSize % 2 != 0)
             {
             list.push_back(_mm_set1_ps(0.0f));
@@ -546,30 +530,40 @@ void Octree::integrate(float dt)
             }
         listSize/=2;
         float* lptr = (float*)&list[0];
-        // For each leaf in list, calculate the acceleration by summing over all bodies in interaction list
-        for(int k = 0; k < leafsSize; k++)
+        float* lptrStart = lptr;
+
+        // For each leaf in critCell, calculate the acceleration by summing over all bodies in interaction list
+        node = critCell;
+        Node* end = critCell->next;
+        do
             {
-            int idx = 4*(leafs[k]);
-            __m128 p = _mm_load_ps(pos + idx);
-            __m128 v = _mm_load_ps(vel + idx);
-            __m128 a = {0.0f,0.0f,0.0f,0.0f};
-            __m256 _p1 = _mm256_set_m128(p,p);
-            
-            for(int j = 0; j < listSize; j++)
+            if(node->type)
                 {
-                __m256 _p2 = _mm256_loadu_ps(lptr);
-                a = _mm_add_ps(a, accel(_p1, _p2, eps2));
-                lptr += 8;
+                int idx = 4*(((Leaf*)node)->i);
+                __m128 p = _mm_load_ps(pos + idx);
+                __m128 v = _mm_load_ps(vel + idx);
+                __m128 a = {0.0f,0.0f,0.0f,0.0f};
+                __m256 _p1 = _mm256_set_m128(p,p);
+
+                for(int j = 0; j < listSize; j++)
+                    {
+                    __m256 _p2 = _mm256_loadu_ps(lptr);
+                    a = _mm_add_ps(a, accel(_p1, _p2, eps2));
+                    lptr += 8;
+                    }
+
+                v = _mm_fmadd_ps(dtv, a, v);
+                p = _mm_fmadd_ps(dtv, v, p);
+
+                _mm_store_ps(pos + idx, p);
+                _mm_store_ps(vel + idx, v);
+
+                lptr = lptrStart;
+                node = node->next;
                 }
-
-            v = _mm_fmadd_ps(dtv, a, v);
-            p = _mm_fmadd_ps(dtv, v, p);
-
-            _mm_store_ps(pos + idx, p);
-            _mm_store_ps(vel + idx, v);
-
-            lptr -= 8*listSize;
+            else node = ((Cell*)node)->more;
             }
+        while(node != end);
         }
     }
     buildTree();
