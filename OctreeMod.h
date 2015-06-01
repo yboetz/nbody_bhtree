@@ -393,22 +393,20 @@ float Octree::energy()
     float V = 0;
     float T = 0;
     
-    const int Csize = critCells.size();
+    const int cSize = critCells.size();
     
     #pragma omp parallel
     {
     std::vector<Node*> list;
-    std::vector<Leaf*> leafs;
     float _V = 0;
     float _T = 0;
     
     #pragma omp for schedule(dynamic)
-    for(int i = 0; i < Csize; i++)
+    for(int i = 0; i < cSize; i++)
         {
         list.resize(0);
-        leafs.resize(0);
         Cell* critCell = (Cell*)critCells[i];
-        // Finds all cells outside critical cell which satisfy opening angle criterion and appends them to interaction list
+        // Finds all cells which satisfy opening angle criterion and appends them to interaction list
         Node* node = root;
         do
             {
@@ -420,41 +418,32 @@ float Octree::energy()
             else node = ((Cell*)node)->more;   
             }
         while(node != root);
-        // Adds all leafs within critical cell to list
+
+        const int listSize = list.size();
+        // For each leaf in critCell, calculate the energy by summing over all bodies in interaction list
         node = critCell;
         Node* end = critCell->next;
         do
             {
             if(node->type)
                 {
-                leafs.push_back((Leaf*)node);
+                Leaf* leaf = (Leaf*)node;
+
+                for(int j = 0; j < listSize; j++)
+                    {
+                    Node* _node = list[j];
+                    if(leaf != ((Leaf*)_node)) _V += pot(leaf->com, _node->com);
+                    }
+
+                __m128 v = _mm_load_ps(vel + 4*(leaf->i));
+                v = _mm_mul_ps(v,v);
+                _T += (leaf->com[3]) * (v[0] + v[1] + v[2]);
+
                 node = node->next;
                 }
             else node = ((Cell*)node)->more;   
             }
         while(node != end);
-        
-        const int leafsSize = leafs.size();
-        const int listSize = list.size();
-        // For each leaf in list, calculate the energy by summing over all bodies in interaction list
-        for(int k = 0; k < leafsSize; k++)
-            {
-            Leaf* leaf = leafs[k];
-            float p = 0.0f;
-            
-            for(int j = 0; j < listSize; j++)
-                {
-                Node* _node = list[j];
-                if(leaf != ((Leaf*)_node)) p += pot(leaf->com, _node->com);
-                }
-            
-            _V += p;
-
-            __m128 v = _mm_load_ps(vel + 4*(leaf->i));
-            v = _mm_mul_ps(v,v);
-        
-            _T += (leaf->com[3]) * (v[0] + v[1] + v[2]);
-            }
         }
     #pragma omp atomic
     V += _V;
@@ -493,22 +482,22 @@ float Octree::angularMomentum()
 
     return sqrt(J[0] + J[1] + J[2]);
     }
-// Finds acceleration for every leaf and updates pos & vel via semi-implicit Euler integration
+// Finds acceleration for every leaf and updates pos & vel via semi-implicit Euler integration. Rebuilds tree afterwards
 void Octree::integrate(float dt)
     {
     __m128 dtv = {dt,dt,dt,0.0f};
-    const int Csize = critCells.size();
+    const int cSize = critCells.size();
     
     #pragma omp parallel
     {
     std::vector<__m128> list;
     
     #pragma omp for schedule(dynamic)
-    for(int i = 0; i < Csize; i++)
+    for(int i = 0; i < cSize; i++)
         {
         list.resize(0);
         Cell* critCell = (Cell*)critCells[i];
-        // Finds all cells outside critical cell which satisfy opening angle criterion and appends them to interaction list
+        // Finds all cells which satisfy opening angle criterion and appends them to interaction list
         Node* node = root;
         do
             {

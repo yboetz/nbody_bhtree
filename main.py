@@ -42,16 +42,16 @@ class NBodyWidget(gl.GLViewWidget):
         self.dt = np.float32(.005)
         # Softening length squared
         self.e = np.float32(.05**2)
+        # Opening angle
+        self.theta = np.float32(.5)
+        # Max number of bodies per critical cell
+        self.Ncrit = 64
         # Tickrate. 1000/max framerate
         self.tickRate = 1000./60
         # Number of intermediate update steps before updating
         self.burst = 1
         # Set distance to origin
         self.opts['distance'] = 20
-        # Opening angle
-        self.theta = np.float32(.5)
-        # Max number of bodies per critical cell
-        self.Ncrit = 64
             
         # Create GridItems
         self.gx = gl.GLGridItem()
