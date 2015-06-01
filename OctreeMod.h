@@ -185,7 +185,7 @@ class Octree
         void insert(Cell*, __m128, int);
         void insertMultiple();
         void buildTree();
-        void threadTree(Node*, Node*);
+        __m128 walkTree(Node*, Node*);
         void getCrit();
         void getBoxSize();
         float energy();
@@ -258,6 +258,7 @@ void Octree::makeRoot()
 // Recursively inserts a body into cell
 void Octree::insert(Cell* cell, __m128 p, int n)
     {
+    (cell->n)++;
     short i = cell->whichOct(p);
     Node* ptr = cell->subp[i];
 
@@ -290,18 +291,6 @@ void Octree::insert(Cell* cell, __m128 p, int n)
         insert(_cell, p, n);      
         }
     else insert((Cell*)ptr, p, n);                                      // If child == cell, recursively insert body into child
-       
-    __m128 _m = _mm_set1_ps(p[3]);                                      // Set new mass & center of mass
-    __m128 m = _mm_set1_ps(cell->com[3]);
-    __m128 M = _mm_add_ps(m, _m);
-    
-    __m128 _S = _mm_mul_ps(cell->com, m);
-    _S = _mm_fmadd_ps(p, _m, _S);
-    
-    cell->com = _mm_div_ps(_S, M);
-    cell->com[3] = M[0];
-    
-    (cell->n)++;
     }
 // Inserts all N bodies into root
 void Octree::insertMultiple()
@@ -317,17 +306,22 @@ void Octree::buildTree()
     {
     makeRoot();
     insertMultiple();
-    threadTree(root, root);
+    walkTree(root, root);
     getCrit();
     }
-// Threads tree for non-recursive walk. While doing also calculates distance of com to midp.
-void Octree::threadTree(Node* p, Node* n)
+/* Recursively walks tree and does three things:
+    1. Threads tree for non-recursive tree walk (sets next & more pointers).
+    2. Returns centre of mass of p to sum from bottom to top.
+    3. Calculates distance of centre of mass and midpoint of cell.*/
+__m128 Octree::walkTree(Node* p, Node* n)
     {
     p->next = n;
+
     if(p->type == 0)
         {
         Cell* ptr = (Cell*)p;
-        ptr->delta = sqrt(dist(ptr->com, ptr->midp));               // Calculates distance between centre of mass and midpoint
+        __m128 com = _mm_set1_ps(0.0f);
+        __m128 M = _mm_set1_ps(0.0f);
 
         int ndesc = 0;
         int i;
@@ -336,18 +330,27 @@ void Octree::threadTree(Node* p, Node* n)
         for(i = 0; i < 8; i++)
             {
             Node* _ptr = (Node*)(ptr->subp[i]);
-            if(_ptr != NULL)
-                {
-                desc[ndesc++] = _ptr;
-                }
+            if(_ptr != NULL) desc[ndesc++] = _ptr;
             }
+
         ptr->more = desc[0];
         desc[ndesc] = n;
         for(i = 0; i < ndesc; i++)
             {
-            threadTree(desc[i], desc[i+1]);
+            __m128 _com = walkTree(desc[i], desc[i+1]);
+            __m128 _m = _mm_set1_ps(_com[3]);
+
+            com = _mm_fmadd_ps(_com,_m,com);
+            M = _mm_add_ps(M,_m);
             }
+        com = _mm_div_ps(com, M);
+        com[3] = M[3];
+
+        ptr->com = com;
+        ptr->delta = sqrt(dist(ptr->com, ptr->midp));
         }
+
+    return p->com;
     }
 // Finds cells with less than Ncrit bodies and appends them to global list C
 void Octree::getCrit()
