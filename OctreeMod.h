@@ -5,6 +5,7 @@
 #include <chrono>
 
 #define _mm256_set_m128(va, vb) _mm256_insertf128_ps(_mm256_castps128_ps256(va), vb, 1)
+
 // Returns 1 if a == b, 0 if a != b
 bool equal_ps(__m128 a, __m128 b)
     {
@@ -162,7 +163,7 @@ Cell::Cell(__m128 mp)
     }
        
 
-// Octree class. Contains pointer to a root cell and a list of all leaves
+// Octree class
 class Octree
     {
     public:
@@ -170,6 +171,7 @@ class Octree
         std::vector<Leaf*> leaves;
         std::vector<Cell*> cells;
         std::vector<Node*> critCells;
+        int listCapacity;
         int numCell;
         int N;
         int Ncrit;
@@ -200,12 +202,13 @@ class Octree
 // Constructor. Sets position, velocity, number of bodies, opening angle and eps squared. Initializes Cell & Leaf vectors
 Octree::Octree(float* p, float* v, int n,  int ncrit, float th, float e2)
     {
-    pos = p; 
+    pos = p;
     vel = v;
     N = n;
     Ncrit = ncrit;
     theta = th;
     eps2 = e2;
+    listCapacity = 0;
         
     root = new Cell(_mm_set1_ps(0.0f));
     root->com = root->midp;
@@ -227,7 +230,7 @@ Octree::~Octree()
 Cell* Octree::makeCell(Leaf* leaf)
     {
     Cell* cell;
-    if(numCell < cells.size()) 
+    if(numCell < (int)cells.size())
         {
         cell = cells[numCell];
         cell->midp = leaf->midp;
@@ -502,7 +505,7 @@ void Octree::integrate(float dt)
     
     #pragma omp parallel
     {
-    std::vector<__m128> list;
+    std::vector<__m128> list (listCapacity);
     
     #pragma omp for schedule(dynamic)
     for(int i = 0; i < cSize; i++)
@@ -566,6 +569,7 @@ void Octree::integrate(float dt)
             }
         while(node != end);
         }
+    listCapacity = list.capacity();
     }
     buildTree();
     }
