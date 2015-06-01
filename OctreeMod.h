@@ -5,7 +5,12 @@
 #include <chrono>
 
 #define _mm256_set_m128(va, vb) _mm256_insertf128_ps(_mm256_castps128_ps256(va), vb, 1)
-
+// Returns 1 if a == b, 0 if a != b
+bool equal_ps(__m128 a, __m128 b)
+    {
+    __m128i tmp = (__m128i)(_mm_xor_ps(a,b));
+    return _mm_test_all_zeros(tmp, tmp);
+    }
 // Calculates cross product of vectors a & b
 __m128 cross(__m128 a, __m128 b)
     {
@@ -397,7 +402,7 @@ float Octree::energy()
     
     #pragma omp parallel
     {
-    std::vector<Node*> list;
+    std::vector<__m128> list;
     float _V = 0;
     float _T = 0;
     
@@ -412,7 +417,7 @@ float Octree::energy()
             {
             if((node->type) || (((node->midp[3])/theta + ((Cell*)node)->delta) < cdist(node->com, critCell->midp)))
                 {
-                list.push_back(node);
+                list.push_back(node->com);
                 node = node->next;
                 }
             else node = ((Cell*)node)->more;   
@@ -428,12 +433,16 @@ float Octree::energy()
             if(node->type)
                 {
                 Leaf* leaf = (Leaf*)node;
+                __m128 _p1 = leaf->com;
+                float p = 0.0f;
 
                 for(int j = 0; j < listSize; j++)
                     {
-                    Node* _node = list[j];
-                    if(leaf != ((Leaf*)_node)) _V += pot(leaf->com, _node->com);
+                    __m128 _p2 = list[j];
+                    if(!equal_ps(_p1,_p2)) p += pot(_p1,_p2);
                     }
+
+                _V += p;
 
                 __m128 v = _mm_load_ps(vel + 4*(leaf->i));
                 v = _mm_mul_ps(v,v);
