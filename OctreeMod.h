@@ -80,7 +80,7 @@ class Node
         
         bool type;                                          // Type of node: Leaf == 1, Cell == 0
         __m128 midp;
-        __m128 com = {0.0f,0.0f,0.0f,0.0f};
+        __m128 com;
         Node* next = NULL;
         
         Node(float*, float);
@@ -139,10 +139,10 @@ Leaf::Leaf(__m128 mp)
 class Cell: public Node
     {
     public:
-        int n = 0;
+        int n;
+        float delta;
         Node* subp[8] = {NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL};       // Pointer to children
         Node* more = NULL;                                                      // Pointer to first child
-        float delta;
         
         Cell(float*, float);
         Cell(__m128);
@@ -207,12 +207,12 @@ Octree::Octree(float* p, float* v, int n,  int ncrit, float th, float e2)
     theta = th;
     eps2 = e2;
         
-    root = new Cell(_mm_set_ps(0.0f,0.0f,0.0f,0.0f));
+    root = new Cell(_mm_set1_ps(0.0f));
     root->com = root->midp;
     cells.push_back((Cell*)root);
     
     leaves.resize(N);
-    for(int i = 0; i < N; i++) leaves[i] = new Leaf(_mm_set_ps(0.0f,0.0f,0.0f,0.0f));
+    for(int i = 0; i < N; i++) leaves[i] = new Leaf(_mm_set1_ps(0.0f));
     
     buildTree();
     }
@@ -249,7 +249,7 @@ void Octree::makeRoot()
     {
     numCell = 1;
     root->midp = root->com;
-    root->com = _mm_set_ps(0.0f,0.0f,0.0f,0.0f);
+    root->com = _mm_set1_ps(0.0f);
     getBoxSize();
     for(int i = 0; i < 8; i++)
         ((Cell*)root)->subp[i] = NULL;
@@ -377,7 +377,7 @@ void Octree::getCrit()
 // Finds boxsize around particles
 void Octree::getBoxSize()
     {
-    __m128 side = {0.0f,0.0f,0.0f,0.0f};
+    __m128 side = _mm_set1_ps(0.0f);
     __m128 cent = root->midp;
     
     for(int i = 0; i < N; i++)
@@ -470,8 +470,8 @@ float Octree::energy()
 // Calculates angular momentum of system (exact)
 float Octree::angularMomentum()
     {
-    __m128 J = {0.0f,0.0f,0.0f,0.0f};
-    __m128 mv = {0.0f,0.0f,0.0f,0.0f};
+    __m128 J = _mm_set1_ps(0.0f);;
+    __m128 mv = _mm_set1_ps(0.0f);;
 
     for(int i = 0; i < N; i++)
         {
@@ -494,7 +494,7 @@ float Octree::angularMomentum()
 // Finds acceleration for every leaf and updates pos & vel via semi-implicit Euler integration. Rebuilds tree afterwards
 void Octree::integrate(float dt)
     {
-    __m128 dtv = {dt,dt,dt,0.0f};
+    __m128 dtv = _mm_setr_ps(dt,dt,dt,0.0f);
     const int cSize = critCells.size();
     
     #pragma omp parallel
@@ -540,7 +540,7 @@ void Octree::integrate(float dt)
                 int idx = 4*(((Leaf*)node)->i);
                 __m128 p = _mm_load_ps(pos + idx);
                 __m128 v = _mm_load_ps(vel + idx);
-                __m128 a = {0.0f,0.0f,0.0f,0.0f};
+                __m128 a = _mm_set1_ps(0.0f);
                 __m256 _p1 = _mm256_set_m128(p,p);
 
                 for(int j = 0; j < listSize; j++)
@@ -575,7 +575,7 @@ void Octree::integrateNSteps(float dt, int n)
 // Returns centre of momentum
 __m128 Octree::centreOfMomentum()
     {
-    __m128 mv = {0.0f,0.0f,0.0f,0.0f};
+    __m128 mv = _mm_set1_ps(0.0f);
 
     for(int i = 0; i < N; i++)
         {
