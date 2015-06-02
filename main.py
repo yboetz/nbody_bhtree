@@ -363,8 +363,8 @@ class NBodyWidget(gl.GLViewWidget):
         E1, J1 = self.oct.energy(), self.oct.angularMomentum()
         dE, dJ = E1 - E0, J1 - J0
         print('Did %i cycles in %.3f seconds.' %(num, T))
-        print('E0 =  %.3f, E1 = %.3f\nJ0 = %.3f, J1 = %.3f' %(E0,E1,J0,J1))
-        print('dE = %.3f = %.3f E0\ndJ = %.3f = %.3f J0\n'
+        print('E0 = %.3f, E1 = %.3f; J0 = %.3f, J1 = %.3f' %(E0,E1,J0,J1))
+        print('dE = %.3f = %.3f E0; dJ = %.3f = %.3f J0\n'
               %(dE, dE / E0, dJ, dJ / J0))        
     
     # Calls testFunction in separate thread
@@ -390,10 +390,6 @@ class Window(QtGui.QWidget):
         startButton.clicked.connect(self.GLWidget.toggleTimer)
         closeButton = QtGui.QPushButton('Close (Esc)')
         closeButton.clicked.connect(pg.exit)
-        lineButton = QtGui.QPushButton('Draw lines (l)')
-        lineButton.clicked.connect(self.GLWidget.toggleLinePlot)
-        gridButton = QtGui.QPushButton('Toggle grid (g)')
-        gridButton.clicked.connect(self.GLWidget.toggleGrid)
         # Slider to change size
         sizeSlider = QtGui.QSlider(QtCore.Qt.Horizontal, self)
         sizeSlider.setMinimum(1)
@@ -425,21 +421,24 @@ class Window(QtGui.QWidget):
         # Display fps
         fpsLabel = QtGui.QLabel('Fps: %.2f' %(self.GLWidget.fps), self)      
         self.GLWidget.fpsSignal.connect(fpsLabel.setText)
+        # Labels for controls
+        controlLabel = QtGui.QLabel(
+        '''Controls:\ns\tStart/stop\ne\tPrint energy\nc\tPrint COM\nn\tToggle colors\nl\tToggle lines\no\tOpen file\nt\tTesting\nEsc\tClose''',
+                                    self)
         # Add widgets on grid
         grid.addWidget(self.GLWidget, 1, 3, 50,50)    
         grid.addWidget(startButton, 1, 2)
         grid.addWidget(closeButton, 1, 1)
-        grid.addWidget(lineButton, 2, 2)
-        grid.addWidget(gridButton, 2, 1)
-        grid.addWidget(sizeSlider, 11, 1, 1, 2)
-        grid.addWidget(sizeSliderLabel, 10, 1, 1, 2)
-        grid.addWidget(dtSlider, 8, 1, 1, 2)
-        grid.addWidget(dtSliderLabel, 7, 1, 1, 2)
-        grid.addWidget(burstSlider, 5, 1, 1, 2)
-        grid.addWidget(burstSliderLabel, 4, 1, 1, 2)
-        grid.addWidget(lengthSlider, 14, 1, 1, 2)
-        grid.addWidget(lengthSliderLabel, 13, 1, 1, 2)
-        grid.addWidget(fpsLabel, 16, 1, 1, 1)
+        grid.addWidget(sizeSlider, 10, 1, 1, 2)
+        grid.addWidget(sizeSliderLabel, 9, 1, 1, 2)
+        grid.addWidget(dtSlider, 7, 1, 1, 2)
+        grid.addWidget(dtSliderLabel, 6, 1, 1, 2)
+        grid.addWidget(burstSlider, 4, 1, 1, 2)
+        grid.addWidget(burstSliderLabel, 3, 1, 1, 2)
+        grid.addWidget(lengthSlider, 13, 1, 1, 2)
+        grid.addWidget(lengthSliderLabel, 12, 1, 1, 2)
+        grid.addWidget(fpsLabel, 15, 1, 1, 1)
+        grid.addWidget(controlLabel, 17, 1, 1, 2)
     
 
 class MainWindow(QtGui.QMainWindow):
@@ -483,8 +482,10 @@ class MainWindow(QtGui.QMainWindow):
         if e.isAutoRepeat():
             pass
         elif e.key() == QtCore.Qt.Key_C:
-            print(self.window.GLWidget.centreOfMass())
-            print(self.window.GLWidget.centreOfMomentum())
+            com1 = self.window.GLWidget.centreOfMass()
+            com2 = self.window.GLWidget.centreOfMomentum()
+            print("R = (%.3f, %.3f, %.3f), " %(com1[0], com1[1], com1[2]), end="")
+            print("P = (%.3f, %.3f, %.3f)" %(com2[0], com2[1], com2[2]))
         # Start and stop timer with S
         elif e.key() == QtCore.Qt.Key_S:
             self.window.GLWidget.toggleTimer()

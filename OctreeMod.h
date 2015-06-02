@@ -50,7 +50,7 @@ float pot(__m128 p1, __m128 p2)
     d = _mm_hadd_ps(d,d);
     d = _mm_rsqrt_ps(d);
     
-    return p1[3]*p2[3]*d[0];
+    return -p1[3]*p2[3]*d[0];
     }
 // Returns squared distance between p1 & p2
 float dist(__m128 p1, __m128 p2)
@@ -471,7 +471,7 @@ float Octree::energy()
     mv = _mm_mul_ps(mv, mv);
     T -= (root->com[3]) * (mv[0] + mv[1] + mv[2]);
 
-    return 0.5f * (T - V);
+    return 0.5f * (T + V);
     }
 // Calculates angular momentum of system (exact)
 float Octree::angularMomentum()
@@ -569,6 +569,7 @@ void Octree::integrate(float dt)
             }
         while(node != end);
         }
+    #pragma omp single
     listCapacity = list.capacity();
     }
     buildTree();
