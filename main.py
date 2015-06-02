@@ -29,14 +29,15 @@ class WorkerThread(QtCore.QThread):
         return
 
 # GL widget class to display nbody data
-class NBodyWidget(gl.GLViewWidget): 
-    # Create fps signal. Has to be declared outside of __init__
-    fpsSignal = QtCore.pyqtSignal(str) 
-    
+class NBodyWidget(gl.GLViewWidget):
     def __init__(self):
         super(NBodyWidget, self).__init__()
         self.init()
-        
+
+    def paintGL(self, *args, **kwds):
+        gl.GLViewWidget.paintGL(self, *args, **kwds)
+        self.renderText(30, 30, "Fps: {:.2f}".format(self.fps))
+
     def init(self):
         # Timestep
         self.dt = np.float32(.005)
@@ -306,7 +307,6 @@ class NBodyWidget(gl.GLViewWidget):
         self.lastTime = self.now
         s = np.clip(dt*2., 0, 1)
         self.fps = self.fps * (1-s) + (1.0/dt) * s
-        self.fpsSignal.emit('Fps: %.2f' %(self.fps))
     
     # Resets camera center to (0,0,0)
     def resetCenter(self):
@@ -418,9 +418,6 @@ class Window(QtGui.QWidget):
         lengthSlider.setValue(self.GLWidget.lineLength // 2)
         lengthSlider.valueChanged.connect(self.GLWidget.setLineLength)
         lengthSliderLabel = QtGui.QLabel('Change line length', self)  
-        # Display fps
-        fpsLabel = QtGui.QLabel('Fps: %.2f' %(self.GLWidget.fps), self)      
-        self.GLWidget.fpsSignal.connect(fpsLabel.setText)
         # Labels for controls
         controlLabel = QtGui.QLabel(
         '''Controls:\ns\tStart/stop\ne\tPrint energy\nc\tPrint COM\nn\tToggle colors\nl\tToggle lines\no\tOpen file\nt\tTesting\nEsc\tClose''',
@@ -437,8 +434,7 @@ class Window(QtGui.QWidget):
         grid.addWidget(burstSliderLabel, 3, 1, 1, 2)
         grid.addWidget(lengthSlider, 13, 1, 1, 2)
         grid.addWidget(lengthSliderLabel, 12, 1, 1, 2)
-        grid.addWidget(fpsLabel, 15, 1, 1, 1)
-        grid.addWidget(controlLabel, 17, 1, 1, 2)
+        grid.addWidget(controlLabel, 16, 1, 1, 2)
     
 
 class MainWindow(QtGui.QMainWindow):
