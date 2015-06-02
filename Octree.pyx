@@ -12,6 +12,7 @@ cdef extern from "OctreeMod.h":
         void updateColors(float*)
         void updateLineColors(float*, float*, int)
         void updateLineData(float*, int)
+        double T
    
 
 cdef class OTree:
@@ -43,3 +44,6 @@ cdef class OTree:
     
     def updateLineData(self, np.ndarray[np.float32_t, ndim=3, mode="c"] linedata, int length):
         return self.thisptr.updateLineData(&linedata[0,0,0], length)
+    
+    property T:
+        def __get__(self): return self.thisptr.T

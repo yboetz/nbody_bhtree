@@ -109,8 +109,8 @@ short Node::whichOct(__m128 p)
     {
     __m128 c = _mm_cmplt_ps(midp, p);
     c = _mm_and_ps(_mm_set1_ps(1.0f), c);
-    short oct = (short)(c[0] + 2*c[1] + 4*c[2]);
-    return oct;
+
+    return (short)(c[0] + 2*c[1] + 4*c[2]);
     }
     
 // Leaf: Class for a node without children & a single body within it
@@ -179,6 +179,11 @@ class Octree
         float* vel;
         float theta;
         float eps2;
+        double T;
+        double scaleP;
+        double scaleV;
+        double scaleM;
+        double G = 6.67384 * pow(10,-11);
 
         Octree(float*, float*, int, int, float, float);
         ~Octree();
@@ -209,6 +214,7 @@ Octree::Octree(float* p, float* v, int n,  int ncrit, float th, float e2)
     theta = th;
     eps2 = e2;
     listCapacity = 0;
+    T = 0;
         
     root = new Cell(_mm_set1_ps(0.0f));
     root->com = root->midp;
@@ -573,6 +579,7 @@ void Octree::integrate(float dt)
     listCapacity = list.capacity();
     }
     buildTree();
+    T += dt;
     }
 // Calls integration function a number of times
 void Octree::integrateNSteps(float dt, int n)

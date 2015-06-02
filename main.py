@@ -36,7 +36,8 @@ class NBodyWidget(gl.GLViewWidget):
 
     def paintGL(self, *args, **kwds):
         gl.GLViewWidget.paintGL(self, *args, **kwds)
-        self.renderText(30, 30, "Fps: {:.2f}".format(self.fps))
+        self.renderText(30, 30, "Fps:\t{:.2f}".format(self.fps))
+        self.renderText(30, 50, "Time:\t{:.3f}".format(self.oct.T))
 
     def init(self):
         # Timestep
