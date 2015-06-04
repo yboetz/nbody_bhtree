@@ -180,10 +180,6 @@ class Octree
         float theta;
         float eps2;
         double T;
-        double scaleP;
-        double scaleV;
-        double scaleM;
-        double G = 6.67384 * pow(10,-11);
 
         Octree(float*, float*, int, int, float, float);
         ~Octree();
@@ -203,6 +199,7 @@ class Octree
         void updateColors(float*);
         void updateLineColors(float*, float*, int);
         void updateLineData(float*, int);
+        float getMass();
     };
 // Constructor. Sets position, velocity, number of bodies, opening angle and eps squared. Initializes Cell & Leaf vectors
 Octree::Octree(float* p, float* v, int n,  int ncrit, float th, float e2)
@@ -215,14 +212,14 @@ Octree::Octree(float* p, float* v, int n,  int ncrit, float th, float e2)
     eps2 = e2;
     listCapacity = 0;
     T = 0;
-        
+
     root = new Cell(_mm_set1_ps(0.0f));
     root->com = root->midp;
     cells.push_back((Cell*)root);
-    
+
     leaves.resize(N);
     for(int i = 0; i < N; i++) leaves[i] = new Leaf(_mm_set1_ps(0.0f));
-    
+
     buildTree();
     }
 // Destructor. Deletes every cell & leaf
@@ -655,4 +652,9 @@ void Octree::updateLineData(float* linedata, int length)
         __m128 p = _mm_load_ps(pos + 4*i);
         _mm_maskstore_ps(linedata + 3*i*length, mask, p);
         }
+    }
+// Returns total mass of system
+float Octree::getMass()
+    {
+    return root->com[3];
     }

@@ -12,13 +12,15 @@ cdef extern from "OctreeMod.h":
         void updateColors(float*)
         void updateLineColors(float*, float*, int)
         void updateLineData(float*, int)
+        float getMass()
         double T
    
 
 cdef class OTree:
     cdef Octree *thisptr
     
-    def __cinit__(self, np.ndarray[np.float32_t, ndim=1, mode="c"] pos, np.ndarray[np.float32_t, ndim=1, mode="c"] vel, int n, int ncrit, np.float32_t th, np.float32_t eps2):
+    def __cinit__(self, np.ndarray[np.float32_t, ndim=1, mode="c"] pos, np.ndarray[np.float32_t, ndim=1, mode="c"] vel,
+                  int n, int ncrit, np.float32_t th, np.float32_t eps2):
         self.thisptr = new Octree (&pos[0], &vel[0], n, ncrit, th, eps2)
         
     def __dealloc__(self):
@@ -44,6 +46,9 @@ cdef class OTree:
     
     def updateLineData(self, np.ndarray[np.float32_t, ndim=3, mode="c"] linedata, int length):
         return self.thisptr.updateLineData(&linedata[0,0,0], length)
+    
+    def getMass(self):
+        return self.thisptr.getMass()
     
     property T:
         def __get__(self): return self.thisptr.T

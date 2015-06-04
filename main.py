@@ -10,6 +10,7 @@ from Octree import OTree
 import pyqtgraph.opengl as gl
 from pyqtgraph.Qt import QtCore, QtGui
 import pyqtgraph as pg
+from math import sqrt
 from time import time
 
 
@@ -36,8 +37,12 @@ class NBodyWidget(gl.GLViewWidget):
 
     def paintGL(self, *args, **kwds):
         gl.GLViewWidget.paintGL(self, *args, **kwds)
-        self.renderText(30, 30, "Fps:\t{:.2f}".format(self.fps))
-        self.renderText(30, 50, "Time:\t{:.3f}".format(self.oct.T))
+        self.renderText(30, 30, "Fps:\t%.2f" %(self.fps))
+        self.renderText(30, 45, "N:\t%i" %(self.n))
+        self.renderText(30, 60, "Mass:\t%.2E Ms" %(self.Mtot))
+        self.renderText(30, 75, "Energy:\t%.3f" %(self.energy))
+        self.renderText(30, 90, "Ang. mom.:\t%.3f" %(self.angl))
+        self.renderText(30, 105, "Time:\t%.2E yrs" %(self.scaleT * self.oct.T))
 
     def init(self):
         # Timestep
@@ -54,7 +59,7 @@ class NBodyWidget(gl.GLViewWidget):
         self.burst = 1
         # Set distance to origin
         self.opts['distance'] = 20
-            
+
         # Create GridItems
         self.gx = gl.GLGridItem()
         self.gx.rotate(90, 0, 1, 0)
@@ -64,7 +69,7 @@ class NBodyWidget(gl.GLViewWidget):
         self.gy.translate(0, -10, 0)
         self.gz = gl.GLGridItem()
         self.gz.translate(0, 0, -10)
-                
+
         # Initial read in of positions and velocity from file
         self.read('Data/Plummer/Plummer_4096')
         # Initialize Octree
@@ -80,12 +85,16 @@ class NBodyWidget(gl.GLViewWidget):
         self.colors = [1,1,.5,1]
         self.lineColors = [1,1,.5,1]
         # Set initial line length
-        self.lineLength = 50
-                
+        self.lineLength = 2
+
         # Add scatterplot with position data. Needs 3 vectors, self.pos is 4 aligned
         self.sp = gl.GLScatterPlotItem(pos=self.pos.reshape((self.n,4))[:,0:3], size = self.sizeArray,
                                        color = self.colors, pxMode=False)
         self.addItem(self.sp)
+        
+        # Energy & angular momentum for displaying
+        self.energy = self.oct.energy()
+        self.angl = self.oct.angularMomentum()
         
         # Timer which calls update function at const framerate
         self.timer = QtCore.QTimer()
@@ -94,6 +103,17 @@ class NBodyWidget(gl.GLViewWidget):
         # Init fps counter
         self.fps = 1000 / self.tickRate
         self.timer.timeout.connect(self.fpsCounter)
+        
+        # Calculates scale of system
+        G = 6.67384*10**(-11)
+        Ms = 1.9891 * 10**30
+        self.Mtot = 10**12
+        scaleP = 3 * 10**19
+        scaleM = self.Mtot / self.oct.getMass() * G * Ms
+        scaleV = sqrt(scaleM / scaleP);
+        self.scaleT = scaleP / scaleV / (3600 * 24 * 365.25);
+#        self.scaleE = scaleM**2 / scaleP / G;
+#        self.scaleJ = scaleM * scaleP * scaleV;
                                               
     # Calls integrate fucntion and updates data
     def updateScatterPlot(self):
@@ -278,6 +298,8 @@ class NBodyWidget(gl.GLViewWidget):
             self.read(path)
             del self.oct
             self.oct = OTree(self.pos, self.vel, self.n, self.Ncrit, self.theta, self.e)
+            self.energy = self.oct.energy()
+            self.angl = self.oct.angularMomentum()
             self.delLinePlot()
             self.resetColors()
             self.setSize(self.size)
@@ -421,7 +443,7 @@ class Window(QtGui.QWidget):
         lengthSliderLabel = QtGui.QLabel('Change line length', self)  
         # Labels for controls
         controlLabel = QtGui.QLabel(
-        '''Controls:\ns\tStart/stop\ne\tPrint energy\nc\tPrint COM\nn\tToggle colors\nl\tToggle lines\no\tOpen file\nt\tTesting\nEsc\tClose''',
+        '''Controls:\ns\tStart/stop\ne\tUpdate energy\nc\tPrint COM\nn\tToggle colors\nl\tToggle lines\no\tOpen file\nt\tTesting\nEsc\tClose''',
                                     self)
         # Add widgets on grid
         grid.addWidget(self.GLWidget, 1, 3, 50,50)    
@@ -495,8 +517,8 @@ class MainWindow(QtGui.QMainWindow):
         elif e.key() == QtCore.Qt.Key_R:
             self.window.GLWidget.resetCenter()
         elif e.key() == QtCore.Qt.Key_E:
-            print('E = %.3f, J = %.3f' %(self.window.GLWidget.oct.energy(), 
-                                         self.window.GLWidget.oct.angularMomentum()))
+            self.window.GLWidget.energy = self.window.GLWidget.oct.energy()
+            self.window.GLWidget.angl = self.window.GLWidget.oct.angularMomentum()
         elif e.key() == QtCore.Qt.Key_T:
             if self.window.GLWidget.timer.isActive():
                 self.window.GLWidget.timer.stop()
