@@ -12,8 +12,8 @@ bool equal_ps(__m128 a, __m128 b)
     __m128i tmp = (__m128i)(_mm_xor_ps(a,b));
     return _mm_test_all_zeros(tmp, tmp);
     }
-// Calculates cross product of vectors a & b
-__m128 cross(__m128 a, __m128 b)
+// Calculates cross product of vectors a & b. Last element is set to zero
+__m128 cross_ps(__m128 a, __m128 b)
     {
     __m128 res = _mm_sub_ps(
                             _mm_mul_ps(a, _mm_shuffle_ps(b, b, _MM_SHUFFLE(3, 0, 2, 1))),
@@ -53,7 +53,7 @@ float pot(__m128 p1, __m128 p2)
     return -p1[3]*p2[3]*d[0];
     }
 // Returns squared distance between p1 & p2
-float dist(__m128 p1, __m128 p2)
+float dist2(__m128 p1, __m128 p2)
     {
     __m128 res = _mm_sub_ps(p2, p1);
     res = _mm_mul_ps(res, res);
@@ -353,7 +353,7 @@ __m128 Octree::walkTree(Node* p, Node* n)
         com[3] = M[3];
 
         ptr->com = com;
-        ptr->delta = sqrt(dist(ptr->com, ptr->midp));
+        ptr->delta = sqrt(dist2(ptr->com, ptr->midp));
         }
 
     return p->com;
@@ -490,12 +490,12 @@ float Octree::angularMomentum()
         __m128 m = _mm_set1_ps(p[3]);
         __m128 v = _mm_mul_ps(m, _mm_load_ps(vel + idx));
         
-        J = _mm_add_ps(J, cross(p, v));    
+        J = _mm_add_ps(J, cross_ps(p, v));
       
         mv = _mm_add_ps(mv,v);
         }
     
-    J = _mm_sub_ps(J,cross(root->com,mv));
+    J = _mm_sub_ps(J,cross_ps(root->com,mv));
     J = _mm_mul_ps(J,J);    
 
     return sqrt(J[0] + J[1] + J[2]);

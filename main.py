@@ -10,7 +10,6 @@ from Octree import OTree
 import pyqtgraph.opengl as gl
 from pyqtgraph.Qt import QtCore, QtGui
 import pyqtgraph as pg
-from math import sqrt
 from time import time
 
 
