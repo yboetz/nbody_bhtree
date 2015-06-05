@@ -39,10 +39,8 @@ class NBodyWidget(gl.GLViewWidget):
         gl.GLViewWidget.paintGL(self, *args, **kwds)
         self.renderText(30, 30, "Fps:\t%.2f" %(self.fps))
         self.renderText(30, 45, "N:\t%i" %(self.n))
-        self.renderText(30, 60, "Mass:\t%.2E Ms" %(self.Mtot))
-        self.renderText(30, 75, "Energy:\t%.3f" %(self.energy))
-        self.renderText(30, 90, "Ang. mom.:\t%.3f" %(self.angl))
-        self.renderText(30, 105, "Time:\t%.2E yrs" %(self.scaleT * self.oct.T))
+        self.renderText(30, 60, "Step:\t%.4f " %(self.dt))
+        self.renderText(30, 75, "Time:\t%.3f" %(self.oct.T))
 
     def init(self):
         # Timestep
@@ -92,10 +90,6 @@ class NBodyWidget(gl.GLViewWidget):
                                        color = self.colors, pxMode=False)
         self.addItem(self.sp)
         
-        # Energy & angular momentum for displaying
-        self.energy = self.oct.energy()
-        self.angl = self.oct.angularMomentum()
-        
         # Timer which calls update function at const framerate
         self.timer = QtCore.QTimer()
         self.timer.timeout.connect(self.updateScatterPlot)
@@ -103,17 +97,6 @@ class NBodyWidget(gl.GLViewWidget):
         # Init fps counter
         self.fps = 1000 / self.tickRate
         self.timer.timeout.connect(self.fpsCounter)
-        
-        # Calculates scale of system
-        G = 6.67384*10**(-11)
-        Ms = 1.9891 * 10**30
-        self.Mtot = 10**12
-        scaleP = 3 * 10**19
-        scaleM = self.Mtot / self.oct.getMass() * G * Ms
-        scaleV = sqrt(scaleM / scaleP);
-        self.scaleT = scaleP / scaleV / (3600 * 24 * 365.25);
-#        self.scaleE = scaleM**2 / scaleP / G;
-#        self.scaleJ = scaleM * scaleP * scaleV;
                                               
     # Calls integrate fucntion and updates data
     def updateScatterPlot(self):
@@ -517,8 +500,9 @@ class MainWindow(QtGui.QMainWindow):
         elif e.key() == QtCore.Qt.Key_R:
             self.window.GLWidget.resetCenter()
         elif e.key() == QtCore.Qt.Key_E:
-            self.window.GLWidget.energy = self.window.GLWidget.oct.energy()
-            self.window.GLWidget.angl = self.window.GLWidget.oct.angularMomentum()
+            E = self.window.GLWidget.oct.energy()
+            J = self.window.GLWidget.oct.angularMomentum()
+            print("E = %.4f, J = %.4f" %(E, J))
         elif e.key() == QtCore.Qt.Key_T:
             if self.window.GLWidget.timer.isActive():
                 self.window.GLWidget.timer.stop()
