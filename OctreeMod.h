@@ -25,7 +25,7 @@ __m128 cross_ps(__m128 a, __m128 b)
 __m128 accel(__m256 p1, __m256 p2, __m256 eps2)
     {
     __m256 a = _mm256_sub_ps(p2,p1);
-    __m256 m = _mm256_set_m128(_mm_set1_ps(p2[3]),_mm_set1_ps(p2[7]));
+    __m256 m = _mm256_shuffle_ps(p2,p2,_MM_SHUFFLE(3,3,3,3));
 
     __m256 f = _mm256_mul_ps(a,a);
     f = _mm256_blend_ps(f,eps2,0b10001000);
