@@ -280,8 +280,6 @@ class NBodyWidget(gl.GLViewWidget):
             self.read(path)
             del self.oct
             self.oct = OTree(self.pos, self.vel, self.n, self.Ncrit, self.theta, self.e)
-            self.energy = self.oct.energy()
-            self.angl = self.oct.angularMomentum()
             self.delLinePlot()
             self.resetColors()
             self.setSize(self.size)

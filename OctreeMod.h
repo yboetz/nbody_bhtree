@@ -44,8 +44,9 @@ __m128 accel(__m256 p1, __m256 p2, __m256 eps2)
 float pot(__m128 p1, __m128 p2)
     {
     __m128 d = _mm_sub_ps(p2, p1);
+
     d = _mm_mul_ps(d, d);
-    d[3] = 0;
+    d = _mm_blend_ps(d,_mm_set1_ps(0.0f),0b1000);
     d = _mm_hadd_ps(d,d);
     d = _mm_hadd_ps(d,d);
     d = _mm_rsqrt_ps(d);
