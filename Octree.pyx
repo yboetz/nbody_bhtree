@@ -12,7 +12,8 @@ cdef extern from "OctreeMod.h":
         void updateColors(float*)
         void updateLineColors(float*, float*, int)
         void updateLineData(float*, int)
-        float getMass()
+        void saveCentreOfMass(float*)
+        void saveCentreOfMomentum(float*)
         double T
    
 
@@ -47,8 +48,15 @@ cdef class OTree:
     def updateLineData(self, np.ndarray[np.float32_t, ndim=3, mode="c"] linedata, int length):
         return self.thisptr.updateLineData(&linedata[0,0,0], length)
     
-    def getMass(self):
-        return self.thisptr.getMass()
+    def centreOfMass(self):
+        cdef np.ndarray[dtype = np.float32_t, ndim = 1, mode="c"] com = np.empty(4, dtype = np.float32)
+        self.thisptr.saveCentreOfMass(&com[0])
+        return com
+    
+    def centreOfMomentum(self):
+        cdef np.ndarray[dtype = np.float32_t, ndim = 1, mode="c"] com = np.empty(4, dtype = np.float32)
+        self.thisptr.saveCentreOfMomentum(&com[0])
+        return com
     
     property T:
         def __get__(self): return self.thisptr.T

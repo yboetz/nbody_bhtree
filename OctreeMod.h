@@ -61,7 +61,7 @@ float dist2(__m128 p1, __m128 p2)
     return res[0] + res[1] + res[2];   
     }
 // Returns cooked distance between center of mass & midpoint (max norm - side/2)
-float cdist(__m128 p, __m128 midp)
+float cdist(__m128 midp, __m128 p)
     {
     __m128 res = _mm_sub_ps(p, midp);
     res = _mm_andnot_ps(_mm_castsi128_ps(_mm_set1_epi32(0x80000000)), res);
@@ -199,7 +199,8 @@ class Octree
         void updateColors(float*);
         void updateLineColors(float*, float*, int);
         void updateLineData(float*, int);
-        float getMass();
+        void saveCentreOfMass(float*);
+        void saveCentreOfMomentum(float*);
     };
 // Constructor. Sets position, velocity, number of bodies, opening angle and eps squared. Initializes Cell & Leaf vectors
 Octree::Octree(float* p, float* v, int n,  int ncrit, float th, float e2)
@@ -424,7 +425,7 @@ float Octree::energy()
         Node* node = root;
         do
             {
-            if((node->type) || (((node->midp[3])/theta + ((Cell*)node)->delta) < cdist(node->com, critCell->midp)))
+            if((node->type) || (((node->midp[3])/theta + ((Cell*)node)->delta) < cdist(critCell->midp, node->com)))
                 {
                 list.push_back(node->com);
                 node = node->next;
@@ -519,7 +520,7 @@ void Octree::integrate(float dt)
         Node* node = root;
         do
             {
-            if((node->type) || (((node->midp[3])/theta + ((Cell*)node)->delta) < cdist(node->com, critCell->midp)))
+            if((node->type) || (((node->midp[3])/theta + ((Cell*)node)->delta) < cdist(critCell->midp, node->com)))
                 {
                 list.push_back(node->com);
                 node = node->next;
@@ -653,8 +654,13 @@ void Octree::updateLineData(float* linedata, int length)
         _mm_maskstore_ps(linedata + 3*i*length, mask, p);
         }
     }
-// Returns total mass of system
-float Octree::getMass()
+// Saves centre of mass at position com
+void Octree::saveCentreOfMass(float* com)
     {
-    return root->com[3];
+    _mm_store_ps(com, root->com);
+    }
+// Saves centre of momentum at position com
+void Octree::saveCentreOfMomentum(float* com)
+    {
+    _mm_store_ps(com, centreOfMomentum());
     }

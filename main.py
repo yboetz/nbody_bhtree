@@ -483,8 +483,8 @@ class MainWindow(QtGui.QMainWindow):
         if e.isAutoRepeat():
             pass
         elif e.key() == QtCore.Qt.Key_C:
-            com1 = self.window.GLWidget.centreOfMass()
-            com2 = self.window.GLWidget.centreOfMomentum()
+            com1 = self.window.GLWidget.oct.centreOfMass()
+            com2 = self.window.GLWidget.oct.centreOfMomentum()
             print("R = (%.3f, %.3f, %.3f), " %(com1[0], com1[1], com1[2]), end="")
             print("P = (%.3f, %.3f, %.3f)" %(com2[0], com2[1], com2[2]))
         # Start and stop timer with S
