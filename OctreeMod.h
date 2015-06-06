@@ -22,13 +22,13 @@ __m128 cross_ps(__m128 a, __m128 b)
     return _mm_shuffle_ps(res, res, _MM_SHUFFLE(3, 0, 2, 1 ));
     }
 // Calculates acceleration on p1 by two points in p2
-__m128 accel(__m256 p1, __m256 p2, float eps2)
+__m128 accel(__m256 p1, __m256 p2, __m256 eps2)
     {
     __m256 a = _mm256_sub_ps(p2,p1);
     __m256 m = _mm256_set_m128(_mm_set1_ps(p2[3]),_mm_set1_ps(p2[7]));
 
     __m256 f = _mm256_mul_ps(a,a);
-    f[3] = eps2; f[7] = eps2;
+    f = _mm256_blend_ps(f,eps2,0b10001000);
     f = _mm256_hadd_ps(f,f);
     f = _mm256_hadd_ps(f,f);
 
@@ -505,6 +505,7 @@ float Octree::angularMomentum()
 void Octree::integrate(float dt)
     {
     __m128 dtv = _mm_setr_ps(dt,dt,dt,0.0f);
+    __m256 eps = _mm256_set1_ps(eps2);
     const int cSize = critCells.size();
     
     #pragma omp parallel
@@ -556,7 +557,7 @@ void Octree::integrate(float dt)
                 for(int j = 0; j < listSize; j++)
                     {
                     __m256 _p2 = _mm256_loadu_ps(lptr);
-                    a = _mm_add_ps(a, accel(_p1, _p2, eps2));
+                    a = _mm_add_ps(a, accel(_p1, _p2, eps));
                     lptr += 8;
                     }
 
