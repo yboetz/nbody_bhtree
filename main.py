@@ -366,8 +366,8 @@ class NBodyWidget(gl.GLViewWidget):
         E1, J1 = self.oct.energy(), self.oct.angularMomentum()
         dE, dJ = E1 - E0, J1 - J0
         print('Did %i cycles in %.3f seconds.' %(num, T))
-        print('E0 = %.3f, E1 = %.3f; J0 = %.3f, J1 = %.3f' %(E0,E1,J0,J1))
-        print('dE = %.3f = %.3f E0; dJ = %.3f = %.3f J0\n'
+        print('E0 = %.4f, E1 = %.4f; J0 = %.4f, J1 = %.4f' %(E0,E1,J0,J1))
+        print('dE = %.4f = %.4f E0; dJ = %.4f = %.4f J0\n'
               %(dE, dE / E0, dJ, dJ / J0))        
     
     # Calls testFunction in separate thread
@@ -422,9 +422,9 @@ class Window(QtGui.QWidget):
         lengthSlider.valueChanged.connect(self.GLWidget.setLineLength)
         lengthSliderLabel = QtGui.QLabel('Change line length', self)  
         # Labels for controls
-        controlLabel = QtGui.QLabel(
-        '''Controls:\ns\tStart/stop\ne\tUpdate energy\nc\tPrint COM\nn\tToggle colors\nl\tToggle lines\no\tOpen file\nt\tTesting\nEsc\tClose''',
-                                    self)
+        controlLabel = QtGui.QLabel('Controls:\nS\tStart/stop\nE\tPrint energy\n'
+                                    'C\tPrint COM\nN\tToggle colors\nL\tToggle lines\n'
+                                    'O\tOpen file\nT\tTesting\nEsc\tClose', self)
         # Add widgets on grid
         grid.addWidget(self.GLWidget, 1, 3, 50,50)    
         grid.addWidget(startButton, 1, 2)
