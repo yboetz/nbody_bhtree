@@ -45,7 +45,7 @@ class NBodyWidget(gl.GLViewWidget):
         # Timestep
         self.dt = np.float32(.005)
         # Softening length squared
-        self.e = np.float32(.05**2)
+        self.e = np.float32(.05)
         # Opening angle
         self.theta = np.float32(.5)
         # Max number of bodies per critical cell

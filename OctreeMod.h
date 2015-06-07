@@ -22,17 +22,15 @@ __m128 cross_ps(__m128 a, __m128 b)
     return _mm_shuffle_ps(res, res, _MM_SHUFFLE(3, 0, 2, 1 ));
     }
 // Calculates acceleration on p1 by two points in p2
-__m128 accel(__m256 p1, __m256 p2, __m256 eps2)
+__m128 accel(__m256 p1, __m256 p2, __m256 eps)
     {
     __m256 a = _mm256_sub_ps(p2,p1);
     __m256 m = _mm256_shuffle_ps(p2,p2,_MM_SHUFFLE(3,3,3,3));
 
-    __m256 f = _mm256_mul_ps(a,a);
-    f = _mm256_blend_ps(f,eps2,0b10001000);
-    f = _mm256_hadd_ps(f,f);
-    f = _mm256_hadd_ps(f,f);
+    __m256 f = _mm256_blend_ps(a,eps,0b10001000);
+    f = _mm256_dp_ps(f,f,0b11111111);
 
-    f = f*f*f;
+    f = _mm256_mul_ps(f,_mm256_mul_ps(f,f));
     f = _mm256_rsqrt_ps(f);
     f = _mm256_mul_ps(m,f);
     a = _mm256_mul_ps(f,a);
@@ -44,22 +42,18 @@ __m128 accel(__m256 p1, __m256 p2, __m256 eps2)
 float pot(__m128 p1, __m128 p2)
     {
     __m128 d = _mm_sub_ps(p2, p1);
-
-    d = _mm_mul_ps(d, d);
-    d = _mm_blend_ps(d,_mm_set1_ps(0.0f),0b1000);
-    d = _mm_hadd_ps(d,d);
-    d = _mm_hadd_ps(d,d);
+    d = _mm_dp_ps(d,d,0b01111111);
     d = _mm_rsqrt_ps(d);
     
     return -p1[3]*p2[3]*d[0];
     }
-// Returns squared distance between p1 & p2
-float dist2(__m128 p1, __m128 p2)
+// Returns distance between p1 & p2
+float dist(__m128 p1, __m128 p2)
     {
     __m128 res = _mm_sub_ps(p2, p1);
-    res = _mm_mul_ps(res, res);
-    
-    return res[0] + res[1] + res[2];   
+    res = _mm_dp_ps(res,res,0b01111111);
+    res = _mm_sqrt_ps(res);
+    return res[0];
     }
 // Returns cooked distance between center of mass & midpoint (max norm - side/2)
 float cdist(__m128 midp, __m128 p)
@@ -179,7 +173,7 @@ class Octree
         float* pos;
         float* vel;
         float theta;
-        float eps2;
+        float eps;
         double T;
 
         Octree(float*, float*, int, int, float, float);
@@ -204,7 +198,7 @@ class Octree
         void saveCentreOfMomentum(float*);
     };
 // Constructor. Sets position, velocity, number of bodies, opening angle and eps squared. Initializes Cell & Leaf vectors
-Octree::Octree(float* p, float* v, int n,  int ncrit, float th, float e2)
+Octree::Octree(float* p, float* v, int n,  int ncrit, float th, float e)
     {
     pos = p;
     vel = v;
@@ -212,7 +206,7 @@ Octree::Octree(float* p, float* v, int n,  int ncrit, float th, float e2)
     numCell = 0;
     Ncrit = ncrit;
     theta = th;
-    eps2 = e2;
+    eps = e;
     listCapacity = 0;
     T = 0;
 
@@ -259,9 +253,10 @@ void Octree::makeRoot()
     root->midp = root->com;
     root->com = _mm_set1_ps(0.0f);
     getBoxSize();
+    Cell* _root = (Cell*)root;
     for(int i = 0; i < 8; i++)
-        ((Cell*)root)->subp[i] = NULL;
-    ((Cell*)root)->n = 0;
+        _root->subp[i] = NULL;
+    _root->n = 0;
     }
 // Recursively inserts a body into cell
 void Octree::insert(Cell* cell, __m128 p, int n)
@@ -356,7 +351,7 @@ __m128 Octree::walkTree(Node* p, Node* n)
         com[3] = M[3];
 
         ptr->com = com;
-        ptr->delta = sqrt(dist2(ptr->com, ptr->midp));
+        ptr->delta = dist(ptr->com, ptr->midp);
         }
 
     return p->com;
@@ -507,7 +502,7 @@ float Octree::angularMomentum()
 void Octree::integrate(float dt)
     {
     __m128 dtv = _mm_setr_ps(dt,dt,dt,0.0f);
-    __m256 eps = _mm256_set1_ps(eps2);
+    __m256 epsv = _mm256_set1_ps(eps);
     const int cSize = critCells.size();
     
     #pragma omp parallel
@@ -559,7 +554,7 @@ void Octree::integrate(float dt)
                 for(int j = 0; j < listSize; j++)
                     {
                     __m256 _p2 = _mm256_loadu_ps(lptr);
-                    a = _mm_add_ps(a, accel(_p1, _p2, eps));
+                    a = _mm_add_ps(a, accel(_p1, _p2, epsv));
                     lptr += 8;
                     }
 
