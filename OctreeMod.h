@@ -83,7 +83,7 @@ class Node
         bool type;                                          // Type of node: Leaf == 1, Cell == 0
         __m128 midp;
         __m128 com;
-        Node* next = NULL;
+        Node* next;
         
         Node(float*, float);
         Node(__m128);
@@ -143,8 +143,8 @@ class Cell: public Node
     public:
         int n;
         float delta;
-        Node* subp[8] = {NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL};       // Pointer to children
-        Node* more = NULL;                                                      // Pointer to first child
+        Node* subp[8];                                                      // Pointer to children
+        Node* more;                                                         // Pointer to first child
         
         Cell(float*, float);
         Cell(__m128);
@@ -209,18 +209,18 @@ Octree::Octree(float* p, float* v, int n,  int ncrit, float th, float e2)
     pos = p;
     vel = v;
     N = n;
+    numCell = 0;
     Ncrit = ncrit;
     theta = th;
     eps2 = e2;
     listCapacity = 0;
     T = 0;
 
-    root = new Cell(_mm_set1_ps(0.0f));
-    root->com = root->midp;
-    cells.push_back((Cell*)root);
-
     leaves.resize(N);
     for(int i = 0; i < N; i++) leaves[i] = new Leaf(_mm_set1_ps(0.0f));
+
+    root = makeCell(leaves[0]);
+    root->com = _mm_set1_ps(0.0f);
 
     buildTree();
     }
@@ -303,10 +303,11 @@ void Octree::insert(Cell* cell, __m128 p, int n)
 // Inserts all N bodies into root
 void Octree::insertMultiple()
     {
+    Cell* _root = (Cell*)root;
     for(int i = 0; i<N; i++)
         {
         __m128 p = _mm_load_ps(pos + 4*i);
-        insert((Cell*)root, p, i);
+        insert(_root, p, i);
         }
     }
 // Creates new root cell and fills it with bodies
@@ -620,8 +621,8 @@ void Octree::updateColors(float* col)
         _v = _mm_rsqrt_ps(_v);
 
         v = _mm_fmadd_ps(v,_v,one);
+        v = _mm_blend_ps(v,two,0b1000);
         v = _mm_div_ps(v,two);
-        v[3] = 1.0f;
 
         _mm_store_ps(col + idx, v);
         }
