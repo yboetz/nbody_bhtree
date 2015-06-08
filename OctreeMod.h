@@ -4,16 +4,17 @@
 #include <immintrin.h>
 #include <chrono>
 
-#define _mm256_set_m128(va, vb) _mm256_insertf128_ps(_mm256_castps128_ps256(va), vb, 1)
+//#define _mm256_set_m128(va, vb) _mm256_insertf128_ps(_mm256_castps128_ps256(va), vb, 1)
+#define _mm256_set_m128(va, vb) _mm256_permute2f128_ps(_mm256_castps128_ps256(va),_mm256_castps128_ps256(vb),0b00100000);
 
 // Returns 1 if a == b, 0 if a != b
-bool equal_ps(__m128 a, __m128 b)
+inline bool equal_ps(__m128 a, __m128 b)
     {
     __m128i tmp = (__m128i)(_mm_xor_ps(a,b));
     return _mm_test_all_zeros(tmp, tmp);
     }
 // Calculates cross product of vectors a & b. Last element is set to zero
-__m128 cross_ps(__m128 a, __m128 b)
+inline __m128 cross_ps(__m128 a, __m128 b)
     {
     __m128 res = _mm_sub_ps(
                             _mm_mul_ps(a, _mm_shuffle_ps(b, b, _MM_SHUFFLE(3, 0, 2, 1))),
@@ -22,7 +23,7 @@ __m128 cross_ps(__m128 a, __m128 b)
     return _mm_shuffle_ps(res, res, _MM_SHUFFLE(3, 0, 2, 1 ));
     }
 // Calculates acceleration on p1 by two points in p2
-__m128 accel(__m256 p1, __m256 p2, __m256 eps)
+inline __m128 accel(__m256 p1, __m256 p2, __m256 eps)
     {
     __m256 a = _mm256_sub_ps(p2,p1);
     __m256 m = _mm256_shuffle_ps(p2,p2,_MM_SHUFFLE(3,3,3,3));
@@ -39,24 +40,25 @@ __m128 accel(__m256 p1, __m256 p2, __m256 eps)
     return _mm256_castps256_ps128(a);
     }
 // Calculates potential between p1 and p2
-float pot(__m128 p1, __m128 p2)
+inline float pot(__m128 p1, __m128 p2)
     {
     __m128 d = _mm_sub_ps(p2, p1);
     d = _mm_dp_ps(d,d,0b01111111);
     d = _mm_rsqrt_ps(d);
-    
+
     return -p1[3]*p2[3]*d[0];
     }
 // Returns distance between p1 & p2
-float dist(__m128 p1, __m128 p2)
+inline float dist(__m128 p1, __m128 p2)
     {
     __m128 res = _mm_sub_ps(p2, p1);
     res = _mm_dp_ps(res,res,0b01111111);
     res = _mm_sqrt_ps(res);
+
     return res[0];
     }
 // Returns cooked distance between center of mass & midpoint (max norm - side/2)
-float cdist(__m128 midp, __m128 p)
+inline float cdist(__m128 midp, __m128 p)
     {
     __m128 res = _mm_sub_ps(p, midp);
     res = _mm_andnot_ps(_mm_castsi128_ps(_mm_set1_epi32(0x80000000)), res);
@@ -105,7 +107,7 @@ short Node::whichOct(__m128 p)
     __m128 c = _mm_cmplt_ps(midp, p);
     c = _mm_and_ps(_mm_set1_ps(1.0f), c);
 
-    return (short)(c[0] + 2*c[1] + 4*c[2]);
+    return (short)(c[0] + 2.0f*c[1] + 4.0f*c[2]);
     }
     
 // Leaf: Class for a node without children & a single body within it
@@ -356,7 +358,7 @@ __m128 Octree::walkTree(Node* p, Node* n)
 
     return p->com;
     }
-// Finds cells with less than Ncrit bodies and appends them to global list C
+// Finds cells with less than Ncrit bodies and appends them to global list critCells
 void Octree::getCrit()
     {
     critCells.resize(0);
@@ -409,7 +411,7 @@ float Octree::energy()
     
     #pragma omp parallel
     {
-    std::vector<__m128> list;
+    std::vector<__m128> list (listCapacity);
     float _V = 0;
     float _T = 0;
     
@@ -466,6 +468,9 @@ float Octree::energy()
     
     #pragma omp atomic
     T += _T;
+    
+    #pragma omp single
+    listCapacity = list.capacity();
     }
 
     __m128 mv = centreOfMomentum();
