@@ -392,7 +392,7 @@ void Octree::getBoxSize()
     for(int i = 0; i < N; i++)
         {   
         __m128 p = _mm_sub_ps(_mm_load_ps(pos + 4*i), cent);
-        p = _mm_andnot_ps(_mm_castsi128_ps(_mm_set1_epi32(0x80000000)), p); // Absolute value
+        p = _mm_and_ps(_mm_castsi128_ps(_mm_set1_epi32(0x7fffffff)),p); // Absolute value
         side = _mm_max_ps(side,p);      
         }
 
@@ -454,8 +454,8 @@ float Octree::energy()
                 _V += p;
 
                 __m128 v = _mm_load_ps(vel + 4*(leaf->i));
-                v = _mm_mul_ps(v,v);
-                _T += (leaf->com[3]) * (v[0] + v[1] + v[2]);
+                v = _mm_dp_ps(v,v,0b01111111);
+                _T += (leaf->com[3]) * v[0];
 
                 node = node->next;
                 }
@@ -474,8 +474,8 @@ float Octree::energy()
     }
 
     __m128 mv = centreOfMomentum();
-    mv = _mm_mul_ps(mv, mv);
-    T -= (root->com[3]) * (mv[0] + mv[1] + mv[2]);
+    mv = _mm_dp_ps(mv,mv,0b01111111);
+    T -= (root->com[3]) * mv[0];
 
     return 0.5f * (T + V);
     }
@@ -614,10 +614,8 @@ void Octree::updateColors(float* col)
         {
         int idx = 4*i;
         __m128 v = _mm_load_ps(vel + idx);
-        __m128 _v = v;
-        _v = _mm_mul_ps(_v,_v);
-        _v = _mm_hadd_ps(_v,_v);
-        _v = _mm_hadd_ps(_v,_v);
+
+        __m128 _v = _mm_dp_ps(v,v,0b01111111);
         _v = _mm_rsqrt_ps(_v);
 
         v = _mm_fmadd_ps(v,_v,one);
