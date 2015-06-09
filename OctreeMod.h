@@ -17,16 +17,16 @@ inline bool equal_ps(__m128 a, __m128 b)
 inline __m128 cross_ps(__m128 a, __m128 b)
     {
     __m128 res = _mm_sub_ps(
-                            _mm_mul_ps(a, _mm_shuffle_ps(b, b, _MM_SHUFFLE(3, 0, 2, 1))),
-                            _mm_mul_ps(b, _mm_shuffle_ps(a, a, _MM_SHUFFLE(3, 0, 2, 1)))
+                            _mm_mul_ps(a,_mm_permute_ps(b,_MM_SHUFFLE(3,0,2,1))),
+                            _mm_mul_ps(b,_mm_permute_ps(a,_MM_SHUFFLE(3,0,2,1)))
                             );
-    return _mm_shuffle_ps(res, res, _MM_SHUFFLE(3, 0, 2, 1 ));
+    return _mm_permute_ps(res,_MM_SHUFFLE(3,0,2,1));
     }
 // Calculates acceleration on p1 by two points in p2
 inline __m128 accel(__m256 p1, __m256 p2, __m256 eps)
     {
     __m256 a = _mm256_sub_ps(p2,p1);
-    __m256 m = _mm256_shuffle_ps(p2,p2,_MM_SHUFFLE(3,3,3,3));
+    __m256 m = _mm256_permute_ps(p2,0b11111111);
 
     __m256 f = _mm256_blend_ps(a,eps,0b10001000);
     f = _mm256_dp_ps(f,f,0b11111111);
@@ -42,7 +42,7 @@ inline __m128 accel(__m256 p1, __m256 p2, __m256 eps)
 // Calculates potential between p1 and p2
 inline float pot(__m128 p1, __m128 p2)
     {
-    __m128 d = _mm_sub_ps(p2, p1);
+    __m128 d = _mm_sub_ps(p2,p1);
     d = _mm_dp_ps(d,d,0b01111111);
     d = _mm_rsqrt_ps(d);
 
@@ -51,7 +51,7 @@ inline float pot(__m128 p1, __m128 p2)
 // Returns distance between p1 & p2
 inline float dist(__m128 p1, __m128 p2)
     {
-    __m128 res = _mm_sub_ps(p2, p1);
+    __m128 res = _mm_sub_ps(p2,p1);
     res = _mm_dp_ps(res,res,0b01111111);
     res = _mm_sqrt_ps(res);
 
@@ -61,10 +61,10 @@ inline float dist(__m128 p1, __m128 p2)
 inline float cdist(__m128 midp, __m128 p)
     {
     __m128 res = _mm_sub_ps(p, midp);
-    res = _mm_andnot_ps(_mm_castsi128_ps(_mm_set1_epi32(0x80000000)), res);
-    res = _mm_max_ps(res, _mm_permute_ps(res,_MM_SHUFFLE(3,1,0,2)));
-    res = _mm_max_ps(res, _mm_permute_ps(res,_MM_SHUFFLE(3,1,0,2)));
-    res = _mm_fmadd_ps(_mm_set1_ps(-0.5f), _mm_set1_ps(midp[3]), res);
+    res = _mm_and_ps(_mm_castsi128_ps(_mm_set1_epi32(0x7fffffff)),res);
+    res = _mm_max_ps(res,_mm_permute_ps(res,_MM_SHUFFLE(3,1,0,2)));
+    res = _mm_max_ps(res,_mm_permute_ps(res,_MM_SHUFFLE(3,1,0,2)));
+    res = _mm_fmadd_ps(_mm_set1_ps(-0.5f),_mm_set1_ps(midp[3]),res);
 
     return res[0];
     }
@@ -104,10 +104,10 @@ Node::Node(__m128 mp)
 // Returns integer value of suboctant of position p
 short Node::whichOct(__m128 p)
     {
-    __m128 c = _mm_cmplt_ps(midp, p);
-    c = _mm_and_ps(_mm_set1_ps(1.0f), c);
+    __m128 c = _mm_cmplt_ps(midp,p);
+    c = _mm_and_ps(_mm_setr_ps(1.0f,2.0f,4.0f,0.0f),c);
 
-    return (short)(c[0] + 2.0f*c[1] + 4.0f*c[2]);
+    return (short)(c[0] + c[1] + c[2]);
     }
     
 // Leaf: Class for a node without children & a single body within it
@@ -199,7 +199,7 @@ class Octree
         void saveCentreOfMass(float*);
         void saveCentreOfMomentum(float*);
     };
-// Constructor. Sets position, velocity, number of bodies, opening angle and eps squared. Initializes Cell & Leaf vectors
+// Constructor. Sets position, velocity, number of bodies, opening angle and softening length. Initializes Cell & Leaf vectors
 Octree::Octree(float* p, float* v, int n,  int ncrit, float th, float e)
     {
     pos = p;

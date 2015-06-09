@@ -44,7 +44,7 @@ class NBodyWidget(gl.GLViewWidget):
     def init(self):
         # Timestep
         self.dt = np.float32(.005)
-        # Softening length squared
+        # Softening length. CANNOT be zero or program will crash
         self.e = np.float32(.05)
         # Opening angle
         self.theta = np.float32(.5)
