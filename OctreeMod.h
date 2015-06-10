@@ -74,8 +74,6 @@ inline float cdist(__m128 midp, __m128 p)
 class Node
     {  
     public:
-        static __m128 octIdx[8];
-        
         bool type;                                          // Type of node: Leaf == 1, Cell == 0
         __m128 midp;
         __m128 com;
@@ -83,10 +81,7 @@ class Node
         
         Node(float*, float);
         Node(__m128);
-        short whichOct(__m128);      
     };
-    
-__m128 Node::octIdx[8] = {{-1,-1,-1,-2},{1,-1,-1,-2},{-1,1,-1,-2},{1,1,-1,-2},{-1,-1,1,-2},{1,-1,1,-2},{-1,1,1,-2},{1,1,1,-2}};
 
 // Node constructor. Sets midpoint and side length
 Node::Node(float* mp, float s)
@@ -101,20 +96,12 @@ Node::Node(__m128 mp)
     {
     midp = mp;
     }
-// Returns integer value of suboctant of position p
-short Node::whichOct(__m128 p)
-    {
-    __m128 c = _mm_cmplt_ps(midp,p);
-    c = _mm_and_ps(_mm_setr_ps(1.0f,2.0f,4.0f,0.0f),c);
 
-    return (short)(c[0] + c[1] + c[2]);
-    }
-    
 // Leaf: Class for a node without children & a single body within it
 class Leaf: public Node
     {
     public:
-        int i;
+        int id;                                                              // Particle id
         
         Leaf(float*, float);
         Leaf(__m128);
@@ -137,14 +124,18 @@ Leaf::Leaf(__m128 mp)
 class Cell: public Node
     {
     public:
-        int n;
-        float delta;
+        static __m128 octIdx[8];
+        int n;                                                              // Number of bodies inside cell
+        float delta;                                                        // Distance from midpoint to centre of mass
         Node* subp[8];                                                      // Pointer to children
         Node* more;                                                         // Pointer to first child
         
         Cell(float*, float);
         Cell(__m128);
+        short whichOct(__m128);
     };
+
+__m128 Cell::octIdx[8] = {{-1,-1,-1,-2},{1,-1,-1,-2},{-1,1,-1,-2},{1,1,-1,-2},{-1,-1,1,-2},{1,-1,1,-2},{-1,1,1,-2},{1,1,1,-2}};
     
 // Cell constructor. Calls Node constructor & sets type
 Cell::Cell(float* mp, float s) 
@@ -158,7 +149,15 @@ Cell::Cell(__m128 mp)
     {
     type = 0;
     }
-       
+// Returns integer value of suboctant of position p
+short Cell::whichOct(__m128 p)
+    {
+    __m128 c = _mm_cmplt_ps(midp,p);
+    c = _mm_and_ps(_mm_setr_ps(1.0f,2.0f,4.0f,0.0f),c);
+
+    return (short)(c[0] + c[1] + c[2]);
+    }
+
 
 // Octree class
 class Octree
@@ -261,7 +260,7 @@ void Octree::makeRoot()
     _root->n = 0;
     }
 // Recursively inserts a body into cell
-void Octree::insert(Cell* cell, __m128 p, int n)
+void Octree::insert(Cell* cell, __m128 p, int id)
     {
     (cell->n)++;
     short i = cell->whichOct(p);
@@ -270,14 +269,14 @@ void Octree::insert(Cell* cell, __m128 p, int n)
     if(ptr == NULL)                                                     // If child does not exist, create leaf and insert body into leaf.
         {
         __m128 _side = _mm_set1_ps(cell->midp[3] / 4.0f);               // Calculate midp of new leaf
-        __m128 _midp = _mm_fmadd_ps(Node::octIdx[i], _side, cell->midp);
+        __m128 _midp = _mm_fmadd_ps(Cell::octIdx[i], _side, cell->midp);
                   
-        Leaf* _leaf = leaves[n];                                        // Use existing leaf in list
+        Leaf* _leaf = leaves[id];                                       // Use existing leaf in list
         cell->subp[i] = (Node*)_leaf;                                   // Append ptr to leaf in list of subpointers
                 
-        _leaf->com = p;                                                 // Put pos and m into leaf
-        _leaf->midp = _midp;
-        _leaf->i = n;                                                   // Leaf corresponds to n-th particle
+        _leaf->com = p;                                                 // Set centre of mass of leaf
+        _leaf->midp = _midp;                                            // Set midpoint of leaf
+        _leaf->id = id;                                                 // Set particle id in leaf
         }
     else if(ptr->type)                                                  // If child == leaf, create new cell in place of leaf and insert both bodies in cell
         {
@@ -290,12 +289,12 @@ void Octree::insert(Cell* cell, __m128 p, int n)
         _cell->subp[_i] = (Node*)_leaf;
         (_cell->n)++; 
 
-        __m128 _side = _mm_set1_ps(_cell->midp[3] / 4.0f);              // Set parameters of leaf
-        _leaf->midp = _mm_fmadd_ps(Node::octIdx[_i], _side, _leaf->midp);  
+        __m128 _side = _mm_set1_ps(_cell->midp[3] / 4.0f);              // Set new midpoint of leaf
+        _leaf->midp = _mm_fmadd_ps(Cell::octIdx[_i], _side, _leaf->midp);
         
-        insert(_cell, p, n);      
+        insert(_cell, p, id);
         }
-    else insert((Cell*)ptr, p, n);                                      // If child == cell, recursively insert body into child
+    else insert((Cell*)ptr, p, id);                                     // If child == cell, recursively insert body into child
     }
 // Inserts all N bodies into root
 void Octree::insertMultiple()
@@ -335,7 +334,7 @@ __m128 Octree::walkTree(Node* p, Node* n)
         ndesc = 0;
         for(i = 0; i < 8; i++)
             {
-            Node* _ptr = (Node*)(ptr->subp[i]);
+            Node* _ptr = ptr->subp[i];
             if(_ptr != NULL) desc[ndesc++] = _ptr;
             }
 
@@ -349,11 +348,11 @@ __m128 Octree::walkTree(Node* p, Node* n)
             com = _mm_fmadd_ps(_com,_m,com);
             M = _mm_add_ps(M,_m);
             }
-        com = _mm_div_ps(com, M);
-        com[3] = M[3];
+        com = _mm_div_ps(com,M);
+        com = _mm_blend_ps(com,M,0b1000);
 
         ptr->com = com;
-        ptr->delta = dist(ptr->com, ptr->midp);
+        ptr->delta = dist(ptr->com,ptr->midp);
         }
 
     return p->com;
@@ -453,7 +452,7 @@ float Octree::energy()
 
                 _V += p;
 
-                __m128 v = _mm_load_ps(vel + 4*(leaf->i));
+                __m128 v = _mm_load_ps(vel + 4*(leaf->id));
                 v = _mm_dp_ps(v,v,0b01111111);
                 _T += (leaf->com[3]) * v[0];
 
@@ -550,7 +549,7 @@ void Octree::integrate(float dt)
             {
             if(node->type)
                 {
-                int idx = 4*(((Leaf*)node)->i);
+                int idx = 4*(((Leaf*)node)->id);
                 __m128 p = _mm_load_ps(pos + idx);
                 __m128 v = _mm_load_ps(vel + idx);
                 __m128 a = _mm_set1_ps(0.0f);
