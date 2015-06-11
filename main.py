@@ -55,7 +55,7 @@ class NBodyWidget(gl.GLViewWidget):
         # Number of intermediate update steps before updating
         self.burst = 1
         # Set distance to origin
-        self.opts['distance'] = 20
+        self.opts['distance'] = 30
 
         # Create GridItems
         self.gx = gl.GLGridItem()
@@ -71,87 +71,75 @@ class NBodyWidget(gl.GLViewWidget):
         self.read('Data/Plummer/Plummer_4096')
         # Initialize Octree
         self.oct = OTree(self.pos, self.vel, self.n, self.Ncrit, self.theta, self.e)
-        
-        # Create variable for GLLinePlotItem
-        self.lp = None
-        
+
         # Set sizes according to mass, scaled wrt highest mass
         self.size = 75
         self.sizeArray = self.size / 1000 * (self.pos[3::4] / np.amax(self.pos[3::4]))**(1/3)
         # Set colors
-        self.colors = [1,1,.5,1]
-        self.lineColors = [1,1,.5,1]
+        self.colors = (1,1,.5,1)
+        self.lineColors = (1,1,.5,1)
+        self.isColored = False
         # Set initial line length
         self.lineLength = 2
 
-        # Add scatterplot with position data. Needs 3 vectors, self.pos is 4 aligned
+        # Add scatterplot with position data. Needs 3-vectors, self.pos is 4-aligned
         self.sp = gl.GLScatterPlotItem(pos=self.pos.reshape((self.n,4))[:,0:3], size = self.sizeArray,
                                        color = self.colors, pxMode=False)
         self.addItem(self.sp)
-        
+        # Add line plot
+        self.lp = gl.GLLinePlotItem()
+
         # Timer which calls update function at const framerate
         self.timer = QtCore.QTimer()
+        self.timer.timeout.connect(self.updateData)
         self.timer.timeout.connect(self.updateScatterPlot)
-               
+
         # Init fps counter
         self.fps = 1000 / self.tickRate
         self.timer.timeout.connect(self.fpsCounter)
-                                              
-    # Calls integrate fucntion and updates data
-    def updateScatterPlot(self):
+
+    # Integrates positions & velocities self.burst steps forward
+    def updateData(self):
         self.oct.integrateNSteps(self.dt, self.burst)
-        self.sp.setData(pos=self.pos.reshape((self.n,4))[:,0:3], 
+                                              
+    # Updates scatter plot
+    def updateScatterPlot(self):
+        self.sp.setData(pos=self.pos.reshape((self.n,4))[:,0:3],
                         size = self.sizeArray, color = self.colors)
-        
-    # Initial setup of GLLinePlotItem
-    def setupLinePlot(self):
-        self.lineData = np.zeros((self.n, self.lineLength, 3), dtype = np.float32)
-        self.lineData[:,:,:] = self.pos.reshape((self.n,4))[:,None,0:3]       
-        # Add line plot
-        self.lp = gl.GLLinePlotItem(pos = self.lineData, color = self.lineColors, 
-                                    antialias = True, mode = 'lines', width = 1.5)
-        self.addItem(self.lp)
-        if np.array(self.colors).size > 4:
-            self.toggleLineColors()
-    
+
     # Updates GLLinePlotItem data
     def updateLinePlot(self):
         self.oct.updateLineData(self.lineData, self.lineLength)
-        self.lp.setData(pos = self.lineData, color = self.lineColors, antialias = True)      
+        self.lp.setData(pos = self.lineData, color = self.lineColors, antialias = True)
         
-    # Deletes GLLinePlotItem for new data read in
-    def delLinePlot(self):
-        if self.lp in self.items:
-            self.timer.timeout.disconnect(self.updateLinePlot)
-            self.removeItem(self.lp)
-            self.lp = None
-            del self.lineData
-        else:
-            self.lp = None
-            try:
-                del self.lineData
-            except Exception:
-                pass
-    
+    # Initial setup of GLLinePlotItem
+    def setupLinePlot(self):
+        self.lineData = np.empty((self.n, self.lineLength, 3), dtype = np.float32)
+        self.lineData[:,:,:] = self.pos.reshape((self.n,4))[:,None,0:3]       
+        self.lp.setData(pos = self.lineData, color = self.lineColors,
+                        antialias = True, mode = 'lines', width = 1.5)
+        self.addItem(self.lp)
+        self.timer.timeout.connect(self.updateLinePlot)
+        if self.isColored:
+            self.toggleLineColors()
+
     # Sets length of lines
     def setLineLength(self, length):
-        try:
-            length *= 2
-            if self.lp in self.items:
-                if length <= self.lineLength:
-                    self.lineData = np.array(self.lineData[:,:length,:], dtype=np.float32)
-                    if np.array(self.lineColors).size > 4:
-                        self.lineColors = np.array(self.lineColors[:,:length,:], dtype=np.float32)
-                else:
-                    self.lineData = np.array(np.pad(self.lineData, ((0,0),(0,length-self.lineLength),(0,0)),
-                                           'edge'), dtype=np.float32)
-                    if np.array(self.lineColors).size > 4:
-                        self.lineColors = np.array(np.pad(self.lineColors, ((0,0),(0,length-self.lineLength),(0,0)), 
-                                                 'edge'), dtype=np.float32)
-            self.lineLength = length
-        except Exception as error:
-            print(error)
-            pass
+        length *= 2
+        if self.lp in self.items:
+            if length <= self.lineLength:
+                self.lineData = np.array(self.lineData[:,:length,:], dtype=np.float32)
+                if self.isColored:
+                    self.lineColors = np.array(self.lineColors[:,:length,:], dtype=np.float32)
+            else:
+                self.lineData = np.array(np.pad(self.lineData, ((0,0),(0,length-self.lineLength),(0,0)),
+                                       'edge'), dtype=np.float32)
+                if self.isColored:
+                    self.lineColors = np.array(np.pad(self.lineColors, ((0,0),(0,length-self.lineLength),(0,0)),
+                                             'edge'), dtype=np.float32)
+        self.lineLength = length
+        if self.lp in self.items:
+            self.lp.setData(pos = self.lineData, color = self.lineColors, antialias = True)
         
     # Starts/stops timer
     def toggleTimer(self):
@@ -161,17 +149,20 @@ class NBodyWidget(gl.GLViewWidget):
             self.lastTime = time()
             self.timer.start(self.tickRate)
     
-    # Adds/removes GLLinePlotItem
+    # Adds/removes Scatter/Lineplot
     def toggleLinePlot(self):
         if self.lp in self.items:
             self.timer.timeout.disconnect(self.updateLinePlot)
             self.removeItem(self.lp)
-            if np.array(self.lineColors).size > 4:
+            if self.isColored:
                 self.timer.timeout.disconnect(self.updateLineColors)
-                self.lineColors = [1,1,.5,1]              
+                self.lineColors = (1,1,.5,1)
+            self.addItem(self.sp)
+            self.timer.timeout.connect(self.updateScatterPlot)
         else:
+            self.timer.timeout.disconnect(self.updateScatterPlot)
+            self.removeItem(self.sp)
             self.setupLinePlot()   
-            self.timer.timeout.connect(self.updateLinePlot)
     
     # Toggle grid
     def toggleGrid(self):
@@ -184,39 +175,40 @@ class NBodyWidget(gl.GLViewWidget):
     
     # Toggle colors
     def toggleColors(self):
-        if np.array(self.colors).size > 4:
+        if self.isColored:
             self.timer.timeout.disconnect(self.updateColors)
-            self.colors = [1,1,.5,1]
+            self.isColored = False
+            self.colors = (1,1,.5,1)
             self.sp.setGLOptions('additive')
             self.sp.setData(pos=self.pos.reshape((self.n,4))[:,0:3], 
                             size = self.sizeArray, color = self.colors)
-            if np.array(self.lineColors).size > 4:
-                self.toggleLineColors()
+            self.toggleLineColors()
         else:
+            self.isColored = True
             self.colors = np.ones((self.n, 4), dtype = np.float32)
             self.updateColors()
-            self.timer.timeout.connect(self.updateColors)
             self.sp.setGLOptions('translucent')
             self.sp.setData(pos=self.pos.reshape((self.n,4))[:,0:3], 
                             size = self.sizeArray, color = self.colors)
-            if self.lp in self.items:
-                self.toggleLineColors()
+            self.timer.timeout.connect(self.updateColors)
+            self.toggleLineColors()
 
-    # Toggle colors
+    # Toggle colors of lines
     def toggleLineColors(self):
-        if np.array(self.lineColors).size > 4:
-            self.timer.timeout.disconnect(self.updateLineColors)
-            self.lineColors = [1,1,.5,1]
-            self.lp.setData(pos = self.lineData, color = self.lineColors, 
-                            antialias = True)
-        elif self.lp in self.items and np.array(self.colors).size > 4:
-            self.lineColors = np.ones((self.n, self.lineLength, 4), dtype = np.float32)
-            self.lineColors[:,:,2] = .5
-            self.updateLineColors()
-            self.timer.timeout.connect(self.updateLineColors)
-            self.lp.setData(pos = self.lineData, color = self.lineColors, 
-                            antialias = True)
-    
+        if self.lp in self.items:
+            if self.isColored:
+                self.lineColors = np.ones((self.n, self.lineLength, 4), dtype = np.float32)
+                self.lineColors[:,:,2] = .5
+                self.updateLineColors()
+                self.timer.timeout.connect(self.updateLineColors)
+                self.lp.setData(pos = self.lineData, color = self.lineColors,
+                                antialias = True)
+            else:
+                self.timer.timeout.disconnect(self.updateLineColors)
+                self.lineColors = (1,1,.5,1)
+                self.lp.setData(pos = self.lineData, color = self.lineColors,
+                                antialias = True)
+
     # Update dot color depending of current direction of travel
     def updateColors(self):
         self.oct.updateColors(self.colors)
@@ -227,13 +219,14 @@ class NBodyWidget(gl.GLViewWidget):
     
     # Resets colors
     def resetColors(self):
-        if np.array(self.colors).size > 4:
+        if self.isColored:
+            self.isColored = False
             self.timer.timeout.disconnect(self.updateColors)
-            self.colors = [1,1,.5,1]
+            self.colors = (1,1,.5,1)
             self.sp.setGLOptions('additive')
-        if np.array(self.lineColors).size > 4:
-            self.timer.timeout.disconnect(self.updateLineColors)
-            self.lineColors = [1,1,.5,1]
+            if self.lp in self.items:
+                self.timer.timeout.disconnect(self.updateLineColors)
+                self.lineColors = (1,1,.5,1)
 
     # Set dot size
     def setSize(self, size):
@@ -278,12 +271,13 @@ class NBodyWidget(gl.GLViewWidget):
             self.timer.stop()
         try:
             self.read(path)
-            del self.oct
             self.oct = OTree(self.pos, self.vel, self.n, self.Ncrit, self.theta, self.e)
-            self.delLinePlot()
             self.resetColors()
             self.setSize(self.size)
             self.resetCenter()
+            self.lineData = None
+            if self.lp in self.items:
+                self.toggleLinePlot()
         except FileNotFoundError as error:
             print(error)
         except Exception:
@@ -423,7 +417,7 @@ class Window(QtGui.QWidget):
         lengthSliderLabel = QtGui.QLabel('Change line length', self)  
         # Labels for controls
         controlLabel = QtGui.QLabel('Controls:\nS\tStart/stop\nE\tPrint energy\n'
-                                    'C\tPrint COM\nN\tToggle colors\nL\tToggle lines\n'
+                                    'C\tPrint COM\nN\tToggle colors\nL\tToggle dots/lines\n'
                                     'O\tOpen file\nT\tTesting\nEsc\tClose', self)
         # Add widgets on grid
         grid.addWidget(self.GLWidget, 1, 3, 50,50)    
