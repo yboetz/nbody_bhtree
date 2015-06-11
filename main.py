@@ -34,6 +34,7 @@ class NBodyWidget(gl.GLViewWidget):
         super(NBodyWidget, self).__init__()
         self.init()
 
+    # renderText has to be called inside paintGL
     def paintGL(self, *args, **kwds):
         gl.GLViewWidget.paintGL(self, *args, **kwds)
         self.renderText(30, 30, "Fps:\t%.2f" %(self.fps))
@@ -52,10 +53,10 @@ class NBodyWidget(gl.GLViewWidget):
         self.Ncrit = 64
         # Tickrate. 1000/max framerate
         self.tickRate = 1000./60
-        # Number of intermediate update steps before updating
+        # Number of intermediate update steps before drawing
         self.burst = 1
         # Set distance to origin
-        self.opts['distance'] = 30
+        self.opts['distance'] = 35
 
         # Create GridItems
         self.gx = gl.GLGridItem()
@@ -79,15 +80,16 @@ class NBodyWidget(gl.GLViewWidget):
         self.colors = (1,1,.5,1)
         self.lineColors = (1,1,.5,1)
         self.isColored = False
-        # Set initial line length
-        self.lineLength = 2
 
         # Add scatterplot with position data. Needs 3-vectors, self.pos is 4-aligned
         self.sp = gl.GLScatterPlotItem(pos=self.pos.reshape((self.n,4))[:,0:3], size = self.sizeArray,
                                        color = self.colors, pxMode=False)
+        self.sp.setGLOptions('translucent')
         self.addItem(self.sp)
         # Add line plot
         self.lp = gl.GLLinePlotItem()
+        # Set initial line length
+        self.lineLength = 2
 
         # Timer which calls update function at const framerate
         self.timer = QtCore.QTimer()
@@ -102,17 +104,17 @@ class NBodyWidget(gl.GLViewWidget):
     def updateData(self):
         self.oct.integrateNSteps(self.dt, self.burst)
                                               
-    # Updates scatter plot
+    # Updates scatterplot
     def updateScatterPlot(self):
         self.sp.setData(pos=self.pos.reshape((self.n,4))[:,0:3],
                         size = self.sizeArray, color = self.colors)
 
-    # Updates GLLinePlotItem data
+    # Updates lineplot
     def updateLinePlot(self):
         self.oct.updateLineData(self.lineData, self.lineLength)
         self.lp.setData(pos = self.lineData, color = self.lineColors, antialias = True)
         
-    # Initial setup of GLLinePlotItem
+    # Setup of GLLinePlotItem
     def setupLinePlot(self):
         self.lineData = np.empty((self.n, self.lineLength, 3), dtype = np.float32)
         self.lineData[:,:,:] = self.pos.reshape((self.n,4))[:,None,0:3]       
@@ -137,10 +139,9 @@ class NBodyWidget(gl.GLViewWidget):
                 if self.isColored:
                     self.lineColors = np.array(np.pad(self.lineColors, ((0,0),(0,length-self.lineLength),(0,0)),
                                              'edge'), dtype=np.float32)
-        self.lineLength = length
-        if self.lp in self.items:
             self.lp.setData(pos = self.lineData, color = self.lineColors, antialias = True)
-        
+        self.lineLength = length
+
     # Starts/stops timer
     def toggleTimer(self):
         if self.timer.isActive():
@@ -149,20 +150,22 @@ class NBodyWidget(gl.GLViewWidget):
             self.lastTime = time()
             self.timer.start(self.tickRate)
     
-    # Adds/removes Scatter/Lineplot
-    def toggleLinePlot(self):
+    # Toggles scatter/lineplot
+    def togglePlot(self):
         if self.lp in self.items:
             self.timer.timeout.disconnect(self.updateLinePlot)
             self.removeItem(self.lp)
             if self.isColored:
                 self.timer.timeout.disconnect(self.updateLineColors)
                 self.lineColors = (1,1,.5,1)
-            self.addItem(self.sp)
             self.timer.timeout.connect(self.updateScatterPlot)
+            self.addItem(self.sp)
+            self.sp.setData(pos=self.pos.reshape((self.n,4))[:,0:3],
+                            size = self.sizeArray, color = self.colors)
         else:
             self.timer.timeout.disconnect(self.updateScatterPlot)
             self.removeItem(self.sp)
-            self.setupLinePlot()   
+            self.setupLinePlot()
     
     # Toggle grid
     def toggleGrid(self):
@@ -179,19 +182,15 @@ class NBodyWidget(gl.GLViewWidget):
             self.timer.timeout.disconnect(self.updateColors)
             self.isColored = False
             self.colors = (1,1,.5,1)
-            self.sp.setGLOptions('additive')
-            self.sp.setData(pos=self.pos.reshape((self.n,4))[:,0:3], 
-                            size = self.sizeArray, color = self.colors)
-            self.toggleLineColors()
         else:
             self.isColored = True
-            self.colors = np.ones((self.n, 4), dtype = np.float32)
+            self.colors = np.empty((self.n, 4), dtype = np.float32)
             self.updateColors()
-            self.sp.setGLOptions('translucent')
-            self.sp.setData(pos=self.pos.reshape((self.n,4))[:,0:3], 
-                            size = self.sizeArray, color = self.colors)
             self.timer.timeout.connect(self.updateColors)
-            self.toggleLineColors()
+        if self.sp in self.items:
+            self.sp.setData(pos=self.pos.reshape((self.n,4))[:,0:3],
+                            size = self.sizeArray, color = self.colors)
+        self.toggleLineColors()
 
     # Toggle colors of lines
     def toggleLineColors(self):
@@ -201,13 +200,11 @@ class NBodyWidget(gl.GLViewWidget):
                 self.lineColors[:,:,2] = .5
                 self.updateLineColors()
                 self.timer.timeout.connect(self.updateLineColors)
-                self.lp.setData(pos = self.lineData, color = self.lineColors,
-                                antialias = True)
             else:
                 self.timer.timeout.disconnect(self.updateLineColors)
                 self.lineColors = (1,1,.5,1)
-                self.lp.setData(pos = self.lineData, color = self.lineColors,
-                                antialias = True)
+            self.lp.setData(pos = self.lineData, color = self.lineColors,
+                            antialias = True)
 
     # Update dot color depending of current direction of travel
     def updateColors(self):
@@ -223,7 +220,6 @@ class NBodyWidget(gl.GLViewWidget):
             self.isColored = False
             self.timer.timeout.disconnect(self.updateColors)
             self.colors = (1,1,.5,1)
-            self.sp.setGLOptions('additive')
             if self.lp in self.items:
                 self.timer.timeout.disconnect(self.updateLineColors)
                 self.lineColors = (1,1,.5,1)
@@ -232,7 +228,7 @@ class NBodyWidget(gl.GLViewWidget):
     def setSize(self, size):
         self.size = size
         self.sizeArray = (size / 1000) * (self.pos[3::4] / np.amax(self.pos[3::4]))**(1/3)
-        self.sp.setData(pos=self.pos.reshape((self.n,4))[:,0:3], 
+        self.sp.setData(pos=self.pos.reshape((self.n,4))[:,0:3],
                         size = self.sizeArray, color = self.colors)
     
     # Set dt
@@ -265,7 +261,7 @@ class NBodyWidget(gl.GLViewWidget):
             self.pos -= np.tile(np.append(self.centreOfMass(),0),self.n)
             self.vel -= np.tile(np.append(self.centreOfMomentum(),0),self.n)
         
-    # Function to call when reading in new file.
+    # Reads a new file and sets up new octree class. Resets colors and plots
     def readFile(self, path):
         if self.timer.isActive():
             self.timer.stop()
@@ -277,7 +273,7 @@ class NBodyWidget(gl.GLViewWidget):
             self.resetCenter()
             self.lineData = None
             if self.lp in self.items:
-                self.toggleLinePlot()
+                self.togglePlot()
         except FileNotFoundError as error:
             print(error)
         except Exception:
@@ -348,7 +344,7 @@ class NBodyWidget(gl.GLViewWidget):
         else:
             super(NBodyWidget, self).mouseMoveEvent(ev)
     
-    # Makes a test, calculates energy and momentum drift after some steps
+    # Makes a test: Calculates energy and momentum drift after num steps
     def testFunction(self, dt, num):              
         print('Testing: ', end="")
         E0, J0 = self.oct.energy(), self.oct.angularMomentum()
@@ -369,7 +365,7 @@ class NBodyWidget(gl.GLViewWidget):
         self.worker = WorkerThread(self.testFunction, dt, num)
         self.worker.start()
     
-
+# QWidget class with controls & NBodyWidget
 class Window(QtGui.QWidget):
     def __init__(self):
         super(Window, self).__init__()
@@ -433,7 +429,7 @@ class Window(QtGui.QWidget):
         grid.addWidget(lengthSliderLabel, 12, 1, 1, 2)
         grid.addWidget(controlLabel, 16, 1, 1, 2)
     
-
+# Main window, to have file menu & statusbar
 class MainWindow(QtGui.QMainWindow):
     def __init__(self):
         super(MainWindow, self).__init__()
@@ -477,13 +473,13 @@ class MainWindow(QtGui.QMainWindow):
         elif e.key() == QtCore.Qt.Key_C:
             com1 = self.window.GLWidget.oct.centreOfMass()
             com2 = self.window.GLWidget.oct.centreOfMomentum()
-            print("R = (%.3f, %.3f, %.3f), " %(com1[0], com1[1], com1[2]), end="")
+            print("R = (%.3f, %.3f, %.3f)" %(com1[0], com1[1], com1[2]), end=", ")
             print("P = (%.3f, %.3f, %.3f)" %(com2[0], com2[1], com2[2]))
         # Start and stop timer with S
         elif e.key() == QtCore.Qt.Key_S:
             self.window.GLWidget.toggleTimer()
         elif e.key() == QtCore.Qt.Key_L:
-            self.window.GLWidget.toggleLinePlot()
+            self.window.GLWidget.togglePlot()
         elif e.key() == QtCore.Qt.Key_G:
             self.window.GLWidget.toggleGrid()
         elif e.key() == QtCore.Qt.Key_N:
@@ -497,14 +493,12 @@ class MainWindow(QtGui.QMainWindow):
         elif e.key() == QtCore.Qt.Key_T:
             if self.window.GLWidget.timer.isActive():
                 self.window.GLWidget.timer.stop()
-            
             while True:
                 text, ok = QtGui.QInputDialog.getText(self, 'Testing', 'Enter number of cycles')
                 if text.isdigit() and ok:
                     break
                 elif not ok:
                     break
-            
             if ok:
                 num = int(text)
                 self.window.GLWidget.test(0.01, num)
