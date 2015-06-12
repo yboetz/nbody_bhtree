@@ -7,12 +7,12 @@
 //#define _mm256_set_m128(va, vb) _mm256_insertf128_ps(_mm256_castps128_ps256(va), vb, 1)
 #define _mm256_set_m128(va, vb) _mm256_permute2f128_ps(_mm256_castps128_ps256(va),_mm256_castps128_ps256(vb),0b00100000);
 
-// Returns 1 if a == b, 0 if a != b
-inline bool equal_ps(__m128 a, __m128 b)
-    {
-    __m128i tmp = (__m128i)(_mm_xor_ps(a,b));
-    return _mm_test_all_zeros(tmp, tmp);
-    }
+//// Returns 1 if a == b, 0 if a != b
+//inline bool equal_ps(__m128 a, __m128 b)
+//    {
+//    __m128i tmp = (__m128i)(_mm_xor_ps(a,b));
+//    return _mm_test_all_zeros(tmp, tmp);
+//    }
 // Calculates cross product of vectors a & b. Last element is set to zero
 inline __m128 cross_ps(__m128 a, __m128 b)
     {
@@ -39,23 +39,31 @@ inline __m128 accel(__m256 p1, __m256 p2, __m256 eps)
     a = _mm256_add_ps(a,_mm256_permute2f128_ps(a,a,1));
     return _mm256_castps256_ps128(a);
     }
-// Calculates potential between p1 and p2
-inline float pot(__m128 p1, __m128 p2)
+// Calculates potential between p1 and two points in p2
+inline float pot(__m256 p1, __m256 p2)
     {
-    __m128 d = _mm_sub_ps(p2,p1);
-    d = _mm_dp_ps(d,d,0b01111111);
-    d = _mm_rsqrt_ps(d);
+    __m256 mask = _mm256_castsi256_ps(_mm256_cmpeq_epi64(_mm256_castps_si256(p1),_mm256_castps_si256(p2)));
+    mask = _mm256_and_ps(mask,_mm256_permute_ps(mask,0b01001110));
 
-    return -p1[3]*p2[3]*d[0];
+    __m256 d = _mm256_sub_ps(p2,p1);
+    __m256 m = _mm256_mul_ps(_mm256_permute_ps(p1,0b11111111),_mm256_permute_ps(p2,0b11111111));
+
+    d = _mm256_dp_ps(d,d,0b01111111);
+    d = _mm256_rsqrt_ps(d);
+    d = _mm256_mul_ps(m,d);
+
+    d = _mm256_andnot_ps(mask,d);
+    d = _mm256_add_ps(d,_mm256_permute2f128_ps(d,d,1));
+    return -d[0];
     }
 // Returns distance between p1 & p2
 inline float dist(__m128 p1, __m128 p2)
     {
-    __m128 res = _mm_sub_ps(p2,p1);
-    res = _mm_dp_ps(res,res,0b01111111);
-    res = _mm_sqrt_ps(res);
+    __m128 d = _mm_sub_ps(p2,p1);
+    d = _mm_dp_ps(d,d,0b01111111);
+    d = _mm_sqrt_ps(d);
 
-    return res[0];
+    return d[0];
     }
 // Returns cooked distance between center of mass & midpoint (max norm - side/2)
 inline float cdist(__m128 midp, __m128 p)
@@ -432,7 +440,16 @@ float Octree::energy()
             }
         while(node != root);
 
-        const int listSize = list.size();
+        // If list is not __m256 aligned, adds another zero __m128 vector
+        int listSize = list.size();
+        if(listSize % 2 != 0)
+            {
+            list.push_back(_mm_set1_ps(0.0f));
+            listSize++;
+            }
+        listSize/=2;
+        float* lptr = (float*)&list[0];
+        float* lptrStart = lptr;
         // For each leaf in critCell, calculate the energy by summing over all bodies in interaction list
         node = critCell;
         Node* end = critCell->next;
@@ -441,21 +458,24 @@ float Octree::energy()
             if(node->type)
                 {
                 Leaf* leaf = (Leaf*)node;
-                __m128 _p1 = leaf->com;
+                __m128 _p = leaf->com;
+                __m256 _p1 = _mm256_set_m128(_p,_p);
                 float p = 0.0f;
 
                 for(int j = 0; j < listSize; j++)
                     {
-                    __m128 _p2 = list[j];
-                    if(!equal_ps(_p1,_p2)) p += pot(_p1,_p2);
+                    __m256 _p2 = _mm256_loadu_ps(lptr);
+                    p += pot(_p1,_p2);
+                    lptr += 8;
                     }
 
                 _V += p;
 
                 __m128 v = _mm_load_ps(vel + 4*(leaf->id));
                 v = _mm_dp_ps(v,v,0b01111111);
-                _T += (leaf->com[3]) * v[0];
+                _T += _p[3] * v[0];
 
+                lptr = lptrStart;
                 node = node->next;
                 }
             else node = ((Cell*)node)->more;   

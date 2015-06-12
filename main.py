@@ -84,7 +84,6 @@ class NBodyWidget(gl.GLViewWidget):
         # Add scatterplot with position data. Needs 3-vectors, self.pos is 4-aligned
         self.sp = gl.GLScatterPlotItem(pos=self.pos.reshape((self.n,4))[:,0:3], size = self.sizeArray,
                                        color = self.colors, pxMode=False)
-        self.sp.setGLOptions('translucent')
         self.addItem(self.sp)
         # Add line plot
         self.lp = gl.GLLinePlotItem()
@@ -182,11 +181,13 @@ class NBodyWidget(gl.GLViewWidget):
             self.timer.timeout.disconnect(self.updateColors)
             self.isColored = False
             self.colors = (1,1,.5,1)
+            self.sp.setGLOptions('additive')
         else:
+            self.timer.timeout.connect(self.updateColors)
             self.isColored = True
             self.colors = np.empty((self.n, 4), dtype = np.float32)
             self.updateColors()
-            self.timer.timeout.connect(self.updateColors)
+            self.sp.setGLOptions('translucent')
         if self.sp in self.items:
             self.sp.setData(pos=self.pos.reshape((self.n,4))[:,0:3],
                             size = self.sizeArray, color = self.colors)
@@ -220,6 +221,7 @@ class NBodyWidget(gl.GLViewWidget):
             self.isColored = False
             self.timer.timeout.disconnect(self.updateColors)
             self.colors = (1,1,.5,1)
+            self.sp.setGLOptions('additive')
             if self.lp in self.items:
                 self.timer.timeout.disconnect(self.updateLineColors)
                 self.lineColors = (1,1,.5,1)
