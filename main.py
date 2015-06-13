@@ -524,52 +524,60 @@ class MainWindow(QtGui.QMainWindow):
         fileMenu = menubar.addMenu('&File')
         fileMenu.addAction(openFile)  
         fileMenu.addAction(closeApp)
-        
+        # Defines which function to call at what keypress
+        self.keyList = {
+                            QtCore.Qt.Key_C: self.keyPressC,
+                            QtCore.Qt.Key_S: self.window.GLWidget.toggleTimer,
+                            QtCore.Qt.Key_L: self.window.GLWidget.togglePlot,
+                            QtCore.Qt.Key_G: self.window.GLWidget.toggleGrid,
+                            QtCore.Qt.Key_N: self.window.GLWidget.toggleColors,
+                            QtCore.Qt.Key_Q: self.window.GLWidget.resetCenter,
+                            QtCore.Qt.Key_E: self.keyPressE,
+                            QtCore.Qt.Key_R: self.window.GLWidget.toggleRecording,
+                            QtCore.Qt.Key_T: self.keyPressT
+                            }
+
     # Show file dialog and calls file read function
     def showDialog(self):
         if self.window.GLWidget.timer.isActive():
             self.window.GLWidget.timer.stop()
         path = QtGui.QFileDialog.getOpenFileName(self, 'Open file','Data/')
         self.window.GLWidget.readFile(path)
-        
-    # Define keypress events
+    
+    # Functions to call when key is pressed
+    def keyPressC(self):
+        com1 = self.window.GLWidget.oct.centreOfMass()
+        com2 = self.window.GLWidget.oct.centreOfMomentum()
+        print("R = (%.3f, %.3f, %.3f)" %(com1[0], com1[1], com1[2]), end=", ")
+        print("P = (%.3f, %.3f, %.3f)" %(com2[0], com2[1], com2[2]))
+
+    def keyPressE(self):
+        E = self.window.GLWidget.oct.energy()
+        J = self.window.GLWidget.oct.angularMomentum()
+        print("E = %.4f, J = %.4f" %(E, J))
+
+    def keyPressT(self):
+        if self.window.GLWidget.timer.isActive():
+            self.window.GLWidget.timer.stop()
+        while True:
+            text, ok = QtGui.QInputDialog.getText(self, 'Testing', 'Enter number of cycles')
+            if text.isdigit() and ok:
+                break
+            elif not ok:
+                break
+        if ok:
+            num = int(text)
+            self.window.GLWidget.test(0.01, num)
+
+    def doNothing(self):
+        pass
+
+    # Calls function according to pressed key
     def keyPressEvent(self, e):
         if e.isAutoRepeat():
             pass
-        elif e.key() == QtCore.Qt.Key_C:
-            com1 = self.window.GLWidget.oct.centreOfMass()
-            com2 = self.window.GLWidget.oct.centreOfMomentum()
-            print("R = (%.3f, %.3f, %.3f)" %(com1[0], com1[1], com1[2]), end=", ")
-            print("P = (%.3f, %.3f, %.3f)" %(com2[0], com2[1], com2[2]))
-        # Start and stop timer with S
-        elif e.key() == QtCore.Qt.Key_S:
-            self.window.GLWidget.toggleTimer()
-        elif e.key() == QtCore.Qt.Key_L:
-            self.window.GLWidget.togglePlot()
-        elif e.key() == QtCore.Qt.Key_G:
-            self.window.GLWidget.toggleGrid()
-        elif e.key() == QtCore.Qt.Key_N:
-            self.window.GLWidget.toggleColors()
-        elif e.key() == QtCore.Qt.Key_Q:
-            self.window.GLWidget.resetCenter()
-        elif e.key() == QtCore.Qt.Key_E:
-            E = self.window.GLWidget.oct.energy()
-            J = self.window.GLWidget.oct.angularMomentum()
-            print("E = %.4f, J = %.4f" %(E, J))
-        elif e.key() == QtCore.Qt.Key_R:
-            self.window.GLWidget.toggleRecording()
-        elif e.key() == QtCore.Qt.Key_T:
-            if self.window.GLWidget.timer.isActive():
-                self.window.GLWidget.timer.stop()
-            while True:
-                text, ok = QtGui.QInputDialog.getText(self, 'Testing', 'Enter number of cycles')
-                if text.isdigit() and ok:
-                    break
-                elif not ok:
-                    break
-            if ok:
-                num = int(text)
-                self.window.GLWidget.test(0.01, num)
+        else:
+            self.keyList.get(e.key(), self.doNothing)()
 
 
 if __name__ == "__main__":
