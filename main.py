@@ -10,6 +10,7 @@ from Octree import OTree
 import pyqtgraph.opengl as gl
 from pyqtgraph.Qt import QtCore, QtGui
 import pyqtgraph as pg
+from math import ceil
 from time import time
 
 
@@ -224,7 +225,7 @@ class NBodyWidget(gl.GLViewWidget):
             self.sp.setGLOptions('additive')
             if self.lp in self.items:
                 self.timer.timeout.disconnect(self.updateLineColors)
-                self.lineColors = (1,1,.5,1)
+            self.lineColors = (1,1,.5,1)
 
     # Set dot size
     def setSize(self, size):
@@ -271,6 +272,7 @@ class NBodyWidget(gl.GLViewWidget):
             self.read(path)
             self.oct = OTree(self.pos, self.vel, self.n, self.Ncrit, self.theta, self.e)
             self.resetColors()
+            self.setupRecording("del")
             self.setSize(self.size)
             self.resetCenter()
             self.lineData = None
@@ -367,6 +369,66 @@ class NBodyWidget(gl.GLViewWidget):
         self.worker = WorkerThread(self.testFunction, dt, num)
         self.worker.start()
     
+    # Initial setup/destructor of recording
+    def setupRecording(self, key = "setup"):
+        if key == "setup":
+            pg.setConfigOptions(antialias=True)
+#            pg.setConfigOption('background', 'w')
+#            pg.setConfigOption('foreground', 'k')
+            self.tData = np.empty(1000, dtype = np.float32)
+            self.eData = np.empty(1000, dtype = np.float32)
+            self.jData = np.empty(1000, dtype = np.float32)
+            self.tData.fill(self.oct.T)
+            self.eData.fill(self.oct.energy())
+            self.jData.fill(self.oct.angularMomentum())
+            self.GWin = pg.GraphicsWindow(title="Conserved quantities")
+            self.GWin.resize(600,600)
+            self.GWin.ePlot = self.GWin.addPlot(title="Energy")
+            self.GWin.nextRow()
+            self.GWin.jPlot = self.GWin.addPlot(title="Angular momentum")
+            self.ep = self.GWin.ePlot.plot(pen=(255,0,0), name = "Energy")
+            self.jp = self.GWin.jPlot.plot(pen=(0,255,0), name = "Angular")
+            self.GWin.ePlot.setMouseEnabled(False, False)
+            self.GWin.jPlot.setMouseEnabled(False, False)
+            self.isRecording = False
+        elif key == "del":
+            if hasattr(self,'GWin'):
+                if self.isRecording:
+                    self.toggleRecording()
+                del self.GWin
+                del self.tData, self.eData, self.jData
+                del self.ep, self.jp
+
+    # Starts/stops recording
+    def toggleRecording(self):
+        if not hasattr(self, 'GWin'):
+            self.setupRecording()
+        if self.isRecording:
+            self.timer.timeout.disconnect(self.record)
+            self.isRecording = False
+            self.GWin.hide()
+        else:
+            self.timer.timeout.connect(self.record)
+            self.isRecording = True
+            self.frame = 0
+            self.GWin.show()
+
+    # Continuously updates energy & angular momentum plots
+    def record(self):
+        if self.frame % ceil(10/self.burst) == 0:
+            if self.GWin.isHidden():
+                self.toggleRecording()
+            self.tData = np.roll(self.tData,-1)
+            self.eData = np.roll(self.eData,-1)
+            self.jData = np.roll(self.jData,-1)
+            self.tData[-1] = self.oct.T
+            self.eData[-1] = self.oct.energy()
+            self.jData[-1] = self.oct.angularMomentum()
+            self.ep.setData(x = self.tData, y = self.eData)
+            self.jp.setData(x = self.tData, y = self.jData)
+        self.frame += 1
+
+
 # QWidget class with controls & NBodyWidget
 class Window(QtGui.QWidget):
     def __init__(self):
@@ -416,7 +478,9 @@ class Window(QtGui.QWidget):
         # Labels for controls
         controlLabel = QtGui.QLabel('Controls:\nS\tStart/stop\nE\tPrint energy\n'
                                     'C\tPrint COM\nN\tToggle colors\nL\tToggle dots/lines\n'
-                                    'O\tOpen file\nT\tTesting\nEsc\tClose', self)
+                                    'O\tOpen file\nT\tTesting\nR\tPlot invariants\n'
+                                    'Q\tReset center\nEsc\tClose\n\nRotate\tClick&drag\n'
+                                    'Zoom\tWheel/Click&Shift\nPan\tClick&Ctrl', self)
         # Add widgets on grid
         grid.addWidget(self.GLWidget, 1, 3, 50,50)    
         grid.addWidget(startButton, 1, 2)
@@ -486,12 +550,14 @@ class MainWindow(QtGui.QMainWindow):
             self.window.GLWidget.toggleGrid()
         elif e.key() == QtCore.Qt.Key_N:
             self.window.GLWidget.toggleColors()
-        elif e.key() == QtCore.Qt.Key_R:
+        elif e.key() == QtCore.Qt.Key_Q:
             self.window.GLWidget.resetCenter()
         elif e.key() == QtCore.Qt.Key_E:
             E = self.window.GLWidget.oct.energy()
             J = self.window.GLWidget.oct.angularMomentum()
             print("E = %.4f, J = %.4f" %(E, J))
+        elif e.key() == QtCore.Qt.Key_R:
+            self.window.GLWidget.toggleRecording()
         elif e.key() == QtCore.Qt.Key_T:
             if self.window.GLWidget.timer.isActive():
                 self.window.GLWidget.timer.stop()
