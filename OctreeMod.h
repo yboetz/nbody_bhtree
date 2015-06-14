@@ -72,7 +72,7 @@ inline float cdist(__m128 midp, __m128 p)
     res = _mm_and_ps(_mm_castsi128_ps(_mm_set1_epi32(0x7fffffff)),res);
     res = _mm_max_ps(res,_mm_permute_ps(res,_MM_SHUFFLE(3,1,0,2)));
     res = _mm_max_ps(res,_mm_permute_ps(res,_MM_SHUFFLE(3,1,0,2)));
-    res = _mm_fmadd_ps(_mm_set1_ps(-0.5f),_mm_set1_ps(midp[3]),res);
+    res = _mm_fmadd_ps(_mm_set1_ps(-0.5f),_mm_permute_ps(midp,0b11111111),res);
 
     return res[0];
     }
@@ -143,7 +143,9 @@ class Cell: public Node
         short whichOct(__m128);
     };
 
-__m128 Cell::octIdx[8] = {{-1,-1,-1,-2},{1,-1,-1,-2},{-1,1,-1,-2},{1,1,-1,-2},{-1,-1,1,-2},{1,-1,1,-2},{-1,1,1,-2},{1,1,1,-2}};
+// Indexed vectors to easily calculate midpoint and sidelength of suboctants.
+// __m128 Cell::octIdx[8] = {{-1,-1,-1,-2},{1,-1,-1,-2},{-1,1,-1,-2},{1,1,-1,-2},{-1,-1,1,-2},{1,-1,1,-2},{-1,1,1,-2},{1,1,1,-2}};
+__m128 Cell::octIdx[8] = {{-0.25f,-0.25f,-0.25f,-0.5f},{0.25f,-0.25f,-0.25f,-0.5f},{-0.25f,0.25f,-0.25f,-0.5f},{0.25f,0.25f,-0.25f,-0.5f},{-0.25f,-0.25f,0.25f,-0.5f},{0.25f,-0.25f,0.25f,-0.5f},{-0.25f,0.25f,0.25f,-0.5f},{0.25f,0.25f,0.25f,-0.5f}};
     
 // Cell constructor. Calls Node constructor & sets type
 Cell::Cell(float* mp, float s) 
@@ -276,8 +278,8 @@ void Octree::insert(Cell* cell, __m128 p, int id)
 
     if(ptr == NULL)                                                     // If child does not exist, create leaf and insert body into leaf.
         {
-        __m128 _side = _mm_set1_ps(cell->midp[3] / 4.0f);               // Calculate midp of new leaf
-        __m128 _midp = _mm_fmadd_ps(Cell::octIdx[i], _side, cell->midp);
+        __m128 _side = _mm_permute_ps(cell->midp,0b11111111);           // Broadcast midp[3] to all elements of _side
+        __m128 _midp = _mm_fmadd_ps(Cell::octIdx[i], _side, cell->midp);// Calculate midp of leaf with help of octIdx
                   
         Leaf* _leaf = leaves[id];                                       // Use existing leaf in list
         cell->subp[i] = (Node*)_leaf;                                   // Append ptr to leaf in list of subpointers
@@ -297,8 +299,8 @@ void Octree::insert(Cell* cell, __m128 p, int id)
         _cell->subp[_i] = (Node*)_leaf;
         (_cell->n)++; 
 
-        __m128 _side = _mm_set1_ps(_cell->midp[3] / 4.0f);              // Set new midpoint of leaf
-        _leaf->midp = _mm_fmadd_ps(Cell::octIdx[_i], _side, _leaf->midp);
+        __m128 _side = _mm_permute_ps(_cell->midp,0b11111111);          // Broadcast midp[3] to all elements of _side
+        _leaf->midp = _mm_fmadd_ps(Cell::octIdx[_i], _side,_leaf->midp);// Calculate midp of with help of octIdx
         
         insert(_cell, p, id);
         }
@@ -351,7 +353,7 @@ __m128 Octree::walkTree(Node* p, Node* n)
         for(i = 0; i < ndesc; i++)
             {
             __m128 _com = walkTree(desc[i], desc[i+1]);
-            __m128 _m = _mm_set1_ps(_com[3]);
+            __m128 _m = _mm_permute_ps(_com,0b11111111);
 
             com = _mm_fmadd_ps(_com,_m,com);
             M = _mm_add_ps(M,_m);
@@ -406,7 +408,7 @@ void Octree::getBoxSize()
     side = _mm_max_ps(side, _mm_permute_ps(side,_MM_SHUFFLE(3,1,0,2)));
     side = _mm_max_ps(side, _mm_permute_ps(side,_MM_SHUFFLE(3,1,0,2)));
     
-    root->midp[3] = 2*side[0];
+    root->midp[3] = 2.0f*side[0];
     }
 // Calculates energy of system (approximate)
 float Octree::energy()
@@ -509,18 +511,19 @@ float Octree::angularMomentum()
         int idx = 4*i;
                
         __m128 p = _mm_load_ps(pos + idx);
-        __m128 m = _mm_set1_ps(p[3]);
+        __m128 m = _mm_permute_ps(p,0b11111111);
         __m128 v = _mm_mul_ps(m, _mm_load_ps(vel + idx));
         
         J = _mm_add_ps(J, cross_ps(p, v));
       
         mv = _mm_add_ps(mv,v);
         }
-    
-    J = _mm_sub_ps(J,cross_ps(root->com,mv));
-    J = _mm_mul_ps(J,J);    
 
-    return sqrt(J[0] + J[1] + J[2]);
+    J = _mm_sub_ps(J,cross_ps(root->com,mv));
+    J = _mm_dp_ps(J,J,0b01111111);
+    J = _mm_sqrt_ps(J);
+
+    return J[0];
     }
 // Finds acceleration for every leaf and updates pos & vel via semi-implicit Euler integration. Rebuilds tree afterwards
 void Octree::integrate(float dt)

@@ -418,14 +418,15 @@ class NBodyWidget(gl.GLViewWidget):
         if self.frame % ceil(10/self.burst) == 0:
             if self.GWin.isHidden():
                 self.toggleRecording()
-            self.tData = np.roll(self.tData,-1)
-            self.eData = np.roll(self.eData,-1)
-            self.jData = np.roll(self.jData,-1)
-            self.tData[-1] = self.oct.T
-            self.eData[-1] = self.oct.energy()
-            self.jData[-1] = self.oct.angularMomentum()
-            self.ep.setData(x = self.tData, y = self.eData)
-            self.jp.setData(x = self.tData, y = self.jData)
+            else:
+                self.tData = np.roll(self.tData,-1)
+                self.eData = np.roll(self.eData,-1)
+                self.jData = np.roll(self.jData,-1)
+                self.tData[-1] = self.oct.T
+                self.eData[-1] = self.oct.energy()
+                self.jData[-1] = self.oct.angularMomentum()
+                self.ep.setData(x = self.tData, y = self.eData)
+                self.jp.setData(x = self.tData, y = self.jData)
         self.frame += 1
 
 
