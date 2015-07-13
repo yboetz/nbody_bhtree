@@ -49,7 +49,7 @@ class NBodyWidget(gl.GLViewWidget):
         # Softening length. CANNOT be zero or program will crash
         self.e = np.float32(.05)
         # Opening angle
-        self.theta = np.float32(.5)
+        self.theta = np.float32(1)
         # Max number of bodies per critical cell
         self.Ncrit = 64
         # Tickrate. 1000/max framerate
@@ -70,7 +70,7 @@ class NBodyWidget(gl.GLViewWidget):
         self.gz.translate(0, 0, -10)
 
         # Initial read in of positions and velocity from file
-        self.read('Data/Plummer/Plummer_4096')
+        self.read('/home/somebody/Documents/Coding/Python/N-body_BHTree/Data/Plummer/Plummer_4096')
         # Initialize Octree
         self.oct = OTree(self.pos, self.vel, self.n, self.Ncrit, self.theta, self.e)
 
@@ -480,8 +480,8 @@ class Window(QtGui.QWidget):
         controlLabel = QtGui.QLabel('Controls:\nS\tStart/stop\nE\tPrint energy\n'
                                     'C\tPrint COM\nN\tToggle colors\nL\tToggle dots/lines\n'
                                     'O\tOpen file\nT\tTesting\nR\tPlot invariants\n'
-                                    'Q\tReset center\nEsc\tClose\n\nRotate\tClick&drag\n'
-                                    'Zoom\tWheel/Click&Shift\nPan\tClick&Ctrl', self)
+                                    'Q\tReset center\nF\tFullscreen\nEsc\tClose\n\n'
+                                    'Rotate\tClick&drag\nZoom\tWheel/Click&Shift\nPan\tClick&Ctrl', self)
         # Add widgets on grid
         grid.addWidget(self.GLWidget, 1, 3, 50,50)    
         grid.addWidget(startButton, 1, 2)
@@ -535,7 +535,8 @@ class MainWindow(QtGui.QMainWindow):
                             QtCore.Qt.Key_Q: self.window.GLWidget.resetCenter,
                             QtCore.Qt.Key_E: self.keyPressE,
                             QtCore.Qt.Key_R: self.window.GLWidget.toggleRecording,
-                            QtCore.Qt.Key_T: self.keyPressT
+                            QtCore.Qt.Key_T: self.keyPressT,
+                            QtCore.Qt.Key_F: self.toggleFullScreen
                             }
 
     # Show file dialog and calls file read function
@@ -569,6 +570,12 @@ class MainWindow(QtGui.QMainWindow):
         if ok:
             num = int(text)
             self.window.GLWidget.test(0.01, num)
+    
+    def toggleFullScreen(self):
+        if self.isFullScreen():
+            self.showNormal()
+        else:
+            self.showFullScreen()
 
     def doNothing(self):
         pass
