@@ -12,6 +12,7 @@ from pyqtgraph.Qt import QtCore, QtGui
 import pyqtgraph as pg
 from math import ceil
 from time import time
+import pandas as pd
 
 
 # Generic thread which takes a function and its arguments and runs it
@@ -28,6 +29,19 @@ class WorkerThread(QtCore.QThread):
     def run(self):
         self.function(*self.args,**self.kwargs)
         return
+
+# Calculates centre of momentum
+def centreOfMomentum(vel, masses):
+    com = np.sum(vel[:,:3] * masses[:, None], axis = 0)
+    M = np.sum(masses)
+    return com / M
+
+# Calculates centre of mass
+def centreOfMass(pos):
+    masses = pos[:,3]
+    com = np.sum(pos[:,:3] * masses[:, None], axis = 0)
+    M = np.sum(masses)
+    return com / M
 
 # GL widget class to display nbody data
 class NBodyWidget(gl.GLViewWidget):
@@ -241,29 +255,26 @@ class NBodyWidget(gl.GLViewWidget):
     # Set burst
     def setBurst(self, burst):
         self.burst = burst
-            
+    
     # Reads in data from file
     def read(self, path):
-        with open(path, 'r') as file:
-            for i, l in enumerate(file):
-                pass
-            n = i + 1
-            file.seek(0)
-            pos = np.zeros((n, 4), dtype = np.float32)
-            vel = np.zeros((n, 4), dtype = np.float32)
-            for i, line in enumerate(file):
-                x = list(map(float, line.split()))
-                pos[i,0:3] = x[1:4]        
-                pos[i,3] = x[0]
-                vel[i,0:3] = x[4:7]
-            vel[:,3] = 0
-            self.pos = pos.reshape(4*n)
-            self.vel = vel.reshape(4*n)
-            self.n = n
-            # Go to centre of mass & momentum system
-            self.pos -= np.tile(np.append(self.centreOfMass(),0),self.n)
-            self.vel -= np.tile(np.append(self.centreOfMomentum(),0),self.n)
-        
+        data = pd.read_csv(path, delim_whitespace=True, header = None, dtype = np.float32)
+        n = data.shape[0]
+        pos = np.zeros((n, 4), dtype = np.float32)
+        vel = np.zeros((n, 4), dtype = np.float32)
+        # Read position & velocity out of csv data
+        pos[:,0:3] = data.ix[:,1:3]
+        pos[:,3] = data.ix[:,0]
+        vel[:,0:3] = data.ix[:,4:6]
+        vel[:,3] = 0
+        # Go to centre of mass & momentum system
+        pos[:,:3] -= centreOfMass(pos)
+        vel[:,:3] -= centreOfMomentum(vel, pos[:,3])
+        # Copy data to class variables
+        self.pos = pos.reshape(4*n)
+        self.vel = vel.reshape(4*n)
+        self.n = n
+
     # Reads a new file and sets up new octree class. Resets colors and plots
     def readFile(self, path):
         if self.timer.isActive():
@@ -278,25 +289,11 @@ class NBodyWidget(gl.GLViewWidget):
             self.lineData = None
             if self.lp in self.items:
                 self.togglePlot()
-        except FileNotFoundError as error:
+        except OSError as error:
             print(error)
         except Exception:
             print('Read error. Data should be aligned as \'m x y z vx vy vz\'.')
-    
-    # Calculates centre of momentum
-    def centreOfMomentum(self):
-        masses = self.pos[3::4]
-        tmp = np.sum(self.vel.reshape((self.n,4))[:,0:3] * masses[:, None], axis = 0)
-        M = np.sum(masses)
-        return tmp / M
-    
-    # Calculates centre of mass
-    def centreOfMass(self):
-        masses = self.pos[3::4]
-        tmp = np.sum(self.pos.reshape((self.n,4))[:,0:3] * masses[:, None], axis = 0)
-        M = np.sum(masses)
-        return tmp / M
-              
+
     # Calculates current fps
     def fpsCounter(self):
         self.now = time()
@@ -544,7 +541,8 @@ class MainWindow(QtGui.QMainWindow):
         if self.window.GLWidget.timer.isActive():
             self.window.GLWidget.timer.stop()
         path = QtGui.QFileDialog.getOpenFileName(self, 'Open file','Data/')
-        self.window.GLWidget.readFile(path)
+        if path:
+            self.window.GLWidget.readFile(path)
     
     # Functions to call when key is pressed
     def keyPressC(self):
