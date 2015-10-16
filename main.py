@@ -12,23 +12,7 @@ from pyqtgraph.Qt import QtCore, QtGui
 import pyqtgraph as pg
 from math import ceil
 from time import time
-import pandas as pd
-
-
-# Generic thread which takes a function and its arguments and runs it
-class WorkerThread(QtCore.QThread):
-    def __init__(self, function, *args, **kwargs):
-        QtCore.QThread.__init__(self)
-        self.function = function
-        self.args = args
-        self.kwargs = kwargs
- 
-    def __del__(self):
-        self.wait()
- 
-    def run(self):
-        self.function(*self.args,**self.kwargs)
-        return
+from pandas import read_csv
 
 # Calculates centre of momentum
 def centreOfMomentum(vel, masses):
@@ -258,7 +242,7 @@ class NBodyWidget(gl.GLViewWidget):
     
     # Reads in data from file
     def read(self, path):
-        data = pd.read_csv(path, delim_whitespace=True, header = None, dtype = np.float32)
+        data = read_csv(path, delim_whitespace=True, header = None, dtype = np.float32)
         n = data.shape[0]
         pos = np.zeros((n, 4), dtype = np.float32)
         vel = np.zeros((n, 4), dtype = np.float32)
@@ -346,25 +330,27 @@ class NBodyWidget(gl.GLViewWidget):
             super(NBodyWidget, self).mouseMoveEvent(ev)
     
     # Makes a test: Calculates energy and momentum drift after num steps
-    def testFunction(self, dt, num):              
-        print('Testing: ', end="")
+    def test(self, dt, num):
         E0, J0 = self.oct.energy(), self.oct.angularMomentum()
-
+        
+        num_per_sec = 0.5 * 10**6
+        appr_T = self.n * np.log(self.n) / num_per_sec / np.log(num_per_sec) * num
+        if appr_T > 10:
+            ok = input('{:d} steps might take a while. Continue y/n?\n'.format(num))
+            if ok.lower() not in ['y','yes']:
+                return
+        
+        print('Testing: ', end="")
         T = time()
         self.oct.integrateNSteps(np.float32(dt), num)
         T = time() - T
-
+        
         E1, J1 = self.oct.energy(), self.oct.angularMomentum()
         dE, dJ = E1 - E0, J1 - J0
         print('Did %i cycles in %.3f seconds.' %(num, T))
         print('E0 = %.4f, E1 = %.4f; J0 = %.4f, J1 = %.4f' %(E0,E1,J0,J1))
         print('dE = %.4f = %.4f E0; dJ = %.4f = %.4f J0\n'
               %(dE, dE / E0, dJ, dJ / J0))        
-    
-    # Calls testFunction in separate thread
-    def test(self, dt, num):
-        self.worker = WorkerThread(self.testFunction, dt, num)
-        self.worker.start()
     
     # Initial setup/destructor of recording
     def setupRecording(self, key = "setup"):
