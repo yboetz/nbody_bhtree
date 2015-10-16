@@ -16,15 +16,15 @@ from pandas import read_csv
 
 # Calculates centre of momentum
 def centreOfMomentum(vel, masses):
-    com = np.sum(vel[:,:3] * masses[:, None], axis = 0)
-    M = np.sum(masses)
+    com = np.einsum('ij,i',vel[:,:3],masses)
+    M = np.einsum('i->', masses)
     return com / M
 
 # Calculates centre of mass
 def centreOfMass(pos):
     masses = pos[:,3]
-    com = np.sum(pos[:,:3] * masses[:, None], axis = 0)
-    M = np.sum(masses)
+    com = np.einsum('ij,i',pos[:,:3],masses)
+    M = np.einsum('i->', masses)
     return com / M
 
 # GL widget class to display nbody data
@@ -242,15 +242,15 @@ class NBodyWidget(gl.GLViewWidget):
     
     # Reads in data from file
     def read(self, path):
-        data = read_csv(path, delim_whitespace=True, header = None, dtype = np.float32)
+        data = read_csv(path, delim_whitespace=True, header = None,
+                        dtype = np.float32, keep_default_na=False)
         n = data.shape[0]
         pos = np.zeros((n, 4), dtype = np.float32)
         vel = np.zeros((n, 4), dtype = np.float32)
         # Read position & velocity out of csv data
-        pos[:,0:3] = data.ix[:,1:3]
+        pos[:,:3] = data.ix[:,1:3]
         pos[:,3] = data.ix[:,0]
-        vel[:,0:3] = data.ix[:,4:6]
-        vel[:,3] = 0
+        vel[:,:3] = data.ix[:,4:6]
         # Go to centre of mass & momentum system
         pos[:,:3] -= centreOfMass(pos)
         vel[:,:3] -= centreOfMomentum(vel, pos[:,3])
