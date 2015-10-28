@@ -265,6 +265,11 @@ class NBodyWidget(gl.GLViewWidget):
             self.timer.stop()
         try:
             self.read(path)
+        except OSError as error:
+            print(error)
+        except Exception:
+            print('Read error. Data should be aligned as \'m x y z vx vy vz\'.')
+        else:
             self.oct = OTree(self.pos, self.vel, self.n, self.Ncrit, self.theta, self.e)
             self.resetColors()
             self.setupRecording("del")
@@ -273,10 +278,6 @@ class NBodyWidget(gl.GLViewWidget):
             self.lineData = None
             if self.lp in self.items:
                 self.togglePlot()
-        except OSError as error:
-            print(error)
-        except Exception:
-            print('Read error. Data should be aligned as \'m x y z vx vy vz\'.')
 
     # Calculates current fps
     def fpsCounter(self):
@@ -347,10 +348,9 @@ class NBodyWidget(gl.GLViewWidget):
         
         E1, J1 = self.oct.energy(), self.oct.angularMomentum()
         dE, dJ = E1 - E0, J1 - J0
-        print('Did %i cycles in %.3f seconds.' %(num, T))
-        print('E0 = %.4f, E1 = %.4f; J0 = %.4f, J1 = %.4f' %(E0,E1,J0,J1))
-        print('dE = %.4f = %.4f E0; dJ = %.4f = %.4f J0\n'
-              %(dE, dE / E0, dJ, dJ / J0))        
+        print('Did {:d} cycles in {:.3f} seconds.'.format(num, T))
+        print('E0 = {:.4f}, E1 = {:.4f}; J0 = {:.4f}, J1 = {:.4f}'.format(E0,E1,J0,J1))
+        print('dE = {:.4f} = {:.4f} E0; dJ = {:.4f} = {:.4f} J0\n'.format(dE, dE / E0, dJ, dJ / J0))
     
     # Initial setup/destructor of recording
     def setupRecording(self, key = "setup"):
@@ -534,13 +534,13 @@ class MainWindow(QtGui.QMainWindow):
     def keyPressC(self):
         com1 = self.window.GLWidget.oct.centreOfMass()
         com2 = self.window.GLWidget.oct.centreOfMomentum()
-        print("R = (%.3f, %.3f, %.3f)" %(com1[0], com1[1], com1[2]), end=", ")
-        print("P = (%.3f, %.3f, %.3f)" %(com2[0], com2[1], com2[2]))
+        print("R = ({:.3f}, {:.3f}, {:.3f})".format(*com1), end=", ")
+        print("P = ({:.3f}, {:.3f}, {:.3f})".format(*com2))
 
     def keyPressE(self):
         E = self.window.GLWidget.oct.energy()
         J = self.window.GLWidget.oct.angularMomentum()
-        print("E = %.4f, J = %.4f" %(E, J))
+        print("E = {:.4f}, J = {:.4f}".format(E, J))
 
     def keyPressT(self):
         if self.window.GLWidget.timer.isActive():
