@@ -30,18 +30,8 @@ def centreOfMass(pos):
 # GL widget class to display nbody data
 class NBodyWidget(gl.GLViewWidget):
     def __init__(self):
-        super(NBodyWidget, self).__init__()
-        self.init()
+        super().__init__()
 
-    # renderText has to be called inside paintGL
-    def paintGL(self, *args, **kwds):
-        gl.GLViewWidget.paintGL(self, *args, **kwds)
-        self.renderText(30, 30, "Fps:\t%.2f" %(self.fps))
-        self.renderText(30, 45, "N:\t%i" %(self.n))
-        self.renderText(30, 60, "Step:\t%.4f " %(self.dt))
-        self.renderText(30, 75, "Time:\t%.3f" %(self.oct.T))
-
-    def init(self):
         # Timestep
         self.dt = np.float32(.005)
         # Softening length. CANNOT be zero or program will crash
@@ -49,7 +39,7 @@ class NBodyWidget(gl.GLViewWidget):
         # Opening angle
         self.theta = np.float32(1)
         # Max number of bodies per critical cell
-        self.Ncrit = 64
+        self.Ncrit = 128
         # Tickrate. 1000/max framerate
         self.tickRate = 1000./60
         # Number of intermediate update steps before drawing
@@ -67,28 +57,21 @@ class NBodyWidget(gl.GLViewWidget):
         self.gz = gl.GLGridItem()
         self.gz.translate(0, 0, -10)
 
-        # Initial read in of positions and velocity from file
-        self.read('/home/somebody/Documents/Coding/Python/N-body_BHTree/Data/Plummer/Plummer_4096')
-        # Initialize Octree
-        self.oct = OTree(self.pos, self.vel, self.n, self.Ncrit, self.theta, self.e)
-
-        # Set sizes according to mass, scaled wrt highest mass
+        # Initial size (position of size-slider)
         self.size = 75
-        self.sizeArray = self.size / 1000 * (self.pos[3::4] / np.amax(self.pos[3::4]))**(1/3)
+        # Initial line length
+        self.lineLength = 2
         # Set colors
         self.colors = (1,1,.5,1)
         self.lineColors = (1,1,.5,1)
         self.isColored = False
 
-        # Add scatterplot with position data. Needs 3-vectors, self.pos is 4-aligned
-        self.sp = gl.GLScatterPlotItem(pos=self.pos.reshape((self.n,4))[:,0:3], size = self.sizeArray,
-                                       color = self.colors, pxMode=False)
-        self.addItem(self.sp)
-        # Add line plot
+        # Create scatterplot with position data. Needs 3-vectors, self.pos is 4-aligned
+        self.sp = gl.GLScatterPlotItem(pxMode=False)
+        # Create lineplot
         self.lp = gl.GLLinePlotItem()
-        # Set initial line length
-        self.lineLength = 2
-
+        self.addItem(self.sp)
+        
         # Timer which calls update function at const framerate
         self.timer = QtCore.QTimer()
         self.timer.timeout.connect(self.updateData)
@@ -97,7 +80,19 @@ class NBodyWidget(gl.GLViewWidget):
         # Init fps counter
         self.fps = 1000 / self.tickRate
         self.timer.timeout.connect(self.fpsCounter)
-
+        
+        # Initial read in of positions and velocity from file. Creates octree
+        self.readFile('/home/somebody/Documents/Coding/Python/N-body_BHTree/Data/Plummer/Plummer_4096')
+        self.updateScatterPlot()
+    
+    # renderText has to be called inside paintGL
+    def paintGL(self, *args, **kwds):
+        gl.GLViewWidget.paintGL(self, *args, **kwds)
+        self.renderText(30, 30, "Fps:\t%.2f" %(self.fps))
+        self.renderText(30, 45, "N:\t%i" %(self.n))
+        self.renderText(30, 60, "Step:\t%.4f " %(self.dt))
+        self.renderText(30, 75, "Time:\t%.3f" %(self.oct.T))
+    
     # Integrates positions & velocities self.burst steps forward
     def updateData(self):
         self.oct.integrateNSteps(self.dt, self.burst)
@@ -294,11 +289,11 @@ class NBodyWidget(gl.GLViewWidget):
     
     # Stores mouse position
     def mousePressEvent(self, ev):
-        super(NBodyWidget, self).mousePressEvent(ev)
+        super().mousePressEvent(ev)
 
     # Resets pan & zoom positon
     def mouseReleaseEvent(self, ev):
-        super(NBodyWidget, self).mouseReleaseEvent(ev)
+        super().mouseReleaseEvent(ev)
         self.prevZoomPos = None
         self.prevPanPos = None
 
@@ -328,7 +323,7 @@ class NBodyWidget(gl.GLViewWidget):
             self.pan(dx, dy, 0, relative=True)
             self.prevPanPos = pos
         else:
-            super(NBodyWidget, self).mouseMoveEvent(ev)
+            super().mouseMoveEvent(ev)
     
     # Makes a test: Calculates energy and momentum drift after num steps
     def test(self, dt, num):
@@ -416,7 +411,7 @@ class NBodyWidget(gl.GLViewWidget):
 # QWidget class with controls & NBodyWidget
 class Window(QtGui.QWidget):
     def __init__(self):
-        super(Window, self).__init__()
+        super().__init__()
         self.init()
      
     def init(self):   
@@ -482,7 +477,7 @@ class Window(QtGui.QWidget):
 # Main window, to have file menu & statusbar
 class MainWindow(QtGui.QMainWindow):
     def __init__(self):
-        super(MainWindow, self).__init__()
+        super().__init__()
         self.init()
         self.show()
         
