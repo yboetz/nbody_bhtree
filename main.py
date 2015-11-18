@@ -83,11 +83,10 @@ class NBodyWidget(gl.GLViewWidget):
         
         # Initial read in of positions and velocity from file. Creates octree
         self.readFile('/home/somebody/Documents/Coding/Python/N-body_BHTree/Data/Plummer/Plummer_4096')
-        self.updateScatterPlot()
     
     # renderText has to be called inside paintGL
     def paintGL(self, *args, **kwds):
-        gl.GLViewWidget.paintGL(self, *args, **kwds)
+        super().paintGL(*args, **kwds)
         self.renderText(30, 30, "Fps:\t%.2f" %(self.fps))
         self.renderText(30, 45, "N:\t%i" %(self.n))
         self.renderText(30, 60, "Step:\t%.4f " %(self.dt))
@@ -128,10 +127,10 @@ class NBodyWidget(gl.GLViewWidget):
                     self.lineColors = np.array(self.lineColors[:,:length,:], dtype=np.float32)
             else:
                 self.lineData = np.array(np.pad(self.lineData, ((0,0),(0,length-self.lineLength),(0,0)),
-                                       'edge'), dtype=np.float32)
+                                                'edge'), dtype=np.float32)
                 if self.isColored:
                     self.lineColors = np.array(np.pad(self.lineColors, ((0,0),(0,length-self.lineLength),(0,0)),
-                                             'edge'), dtype=np.float32)
+                                                      'edge'), dtype=np.float32)
             self.lp.setData(pos = self.lineData, color = self.lineColors, antialias = True)
         self.lineLength = length
 
