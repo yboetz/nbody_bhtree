@@ -46,16 +46,32 @@ class NBodyWidget(gl.GLViewWidget):
         self.burst = 1
         # Set distance to origin
         self.opts['distance'] = 35
+        self.isPanning = False
 
         # Create GridItems
-        self.gx = gl.GLGridItem()
-        self.gx.rotate(90, 0, 1, 0)
-        self.gx.translate(-10, 0, 0)
-        self.gy = gl.GLGridItem()
-        self.gy.rotate(90, 1, 0, 0)
-        self.gy.translate(0, -10, 0)
-        self.gz = gl.GLGridItem()
-        self.gz.translate(0, 0, -10)
+        gx0 = gl.GLGridItem()
+        gx0.setSpacing(20,20)
+        gx0.rotate(90, 0, 1, 0)
+        gx0.translate(10, 0, 0)
+        gy0 = gl.GLGridItem()
+        gy0.setSpacing(20,20)
+        gy0.rotate(90, 1, 0, 0)
+        gy0.translate(0, 10, 0)
+#        gz0 = gl.GLGridItem()
+#        gz0.setSpacing(20,20)
+#        gz0.translate(0, 0, 10)
+        gx1 = gl.GLGridItem()
+        gx1.setSpacing(20,20)
+        gx1.rotate(90, 0, 1, 0)
+        gx1.translate(-10, 0, 0)
+        gy1 = gl.GLGridItem()
+        gy1.setSpacing(20,20)
+        gy1.rotate(90, 1, 0, 0)
+        gy1.translate(0, -10, 0)
+#        gz1 = gl.GLGridItem()
+#        gz1.setSpacing(20,20)
+#        gz1.translate(0, 0, -10)
+        self.grids = [gx0, gx1, gy0, gy1]
 
         # Initial size (position of size-slider)
         self.size = 75
@@ -68,9 +84,9 @@ class NBodyWidget(gl.GLViewWidget):
 
         # Create scatterplot with position data. Needs 3-vectors, self.pos is 4-aligned
         self.sp = gl.GLScatterPlotItem(pxMode=False)
+        self.addItem(self.sp)
         # Create lineplot
         self.lp = gl.GLLinePlotItem()
-        self.addItem(self.sp)
         
         # Timer which calls update function at const framerate
         self.timer = QtCore.QTimer()
@@ -91,6 +107,11 @@ class NBodyWidget(gl.GLViewWidget):
         self.renderText(30, 45, "N:\t%i" %(self.n))
         self.renderText(30, 60, "Step:\t%.4f " %(self.dt))
         self.renderText(30, 75, "Time:\t%.3f" %(self.oct.T))
+    
+    # Pans around center at const rate of 2pi/min
+    def cont_orbit(self):
+        dp = 6 / self.fps
+        self.orbit(dp,0)
     
     # Integrates positions & velocities self.burst steps forward
     def updateData(self):
@@ -133,7 +154,16 @@ class NBodyWidget(gl.GLViewWidget):
                                                       'edge'), dtype=np.float32)
             self.lp.setData(pos = self.lineData, color = self.lineColors, antialias = True)
         self.lineLength = length
-
+        
+    # Toggles paning
+    def togglePan(self):
+        if self.isPanning:
+            self.timer.timeout.disconnect(self.cont_orbit)
+            self.isPanning = False
+        else:
+            self.timer.timeout.connect(self.cont_orbit)
+            self.isPanning = True
+        
     # Starts/stops timer
     def toggleTimer(self):
         if self.timer.isActive():
@@ -161,8 +191,7 @@ class NBodyWidget(gl.GLViewWidget):
     
     # Toggle grid
     def toggleGrid(self):
-        grids = [self.gx, self.gy, self.gz]
-        for grid in grids:
+        for grid in self.grids:
             if grid in self.items:
                 self.removeItem(grid)
             else:
@@ -272,6 +301,8 @@ class NBodyWidget(gl.GLViewWidget):
             self.lineData = None
             if self.lp in self.items:
                 self.togglePlot()
+            if self.isPanning:
+                self.togglePan()
 
     # Calculates current fps
     def fpsCounter(self):
@@ -288,6 +319,9 @@ class NBodyWidget(gl.GLViewWidget):
     
     # Stores mouse position
     def mousePressEvent(self, ev):
+        if self.isPanning:
+            self.togglePan()
+            self.isPanning = True
         super().mousePressEvent(ev)
 
     # Resets pan & zoom positon
@@ -295,21 +329,22 @@ class NBodyWidget(gl.GLViewWidget):
         super().mouseReleaseEvent(ev)
         self.prevZoomPos = None
         self.prevPanPos = None
+        if self.isPanning:
+            self.isPanning = False
+            self.togglePan()
 
     # Pans in xy-plane
     def mouseMoveEvent(self, ev):
         """ Allow Shift to Move and Ctrl to Pan."""
-        shift = ev.modifiers() & QtCore.Qt.ShiftModifier
-        ctrl = ev.modifiers() & QtCore.Qt.ControlModifier
+        shift = ev.modifiers() == QtCore.Qt.ShiftModifier
+        ctrl = ev.modifiers() == QtCore.Qt.ControlModifier
         if shift:
             y = ev.pos().y()
             if not hasattr(self, 'prevZoomPos') or not self.prevZoomPos:
                 self.prevZoomPos = y
                 return
             dy = y - self.prevZoomPos
-            def delta():
-                return -dy * 5
-            ev.delta = delta
+            ev.delta = lambda: -dy * 5
             self.prevZoomPos = y
             self.wheelEvent(ev)
         elif ctrl:
@@ -392,7 +427,7 @@ class NBodyWidget(gl.GLViewWidget):
 
     # Continuously updates energy & angular momentum plots
     def record(self):
-        if self.frame % ceil(10/self.burst) == 0:
+        if not (self.frame % ceil(20/self.burst)):
             if self.GWin.isHidden():
                 self.toggleRecording()
             else:
@@ -513,7 +548,8 @@ class MainWindow(QtGui.QMainWindow):
                             QtCore.Qt.Key_E: self.keyPressE,
                             QtCore.Qt.Key_R: self.window.GLWidget.toggleRecording,
                             QtCore.Qt.Key_T: self.keyPressT,
-                            QtCore.Qt.Key_F: self.toggleFullScreen
+                            QtCore.Qt.Key_F: self.toggleFullScreen,
+                            QtCore.Qt.Key_P: self.window.GLWidget.togglePan
                             }
 
     # Show file dialog and calls file read function
