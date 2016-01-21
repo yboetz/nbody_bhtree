@@ -319,9 +319,6 @@ class NBodyWidget(gl.GLViewWidget):
     
     # Stores mouse position
     def mousePressEvent(self, ev):
-        if self.isPanning:
-            self.togglePan()
-            self.isPanning = True
         super().mousePressEvent(ev)
 
     # Resets pan & zoom positon
@@ -329,9 +326,12 @@ class NBodyWidget(gl.GLViewWidget):
         super().mouseReleaseEvent(ev)
         self.prevZoomPos = None
         self.prevPanPos = None
-        if self.isPanning:
-            self.isPanning = False
-            self.togglePan()
+        try:        
+            if self.panOnRelease:
+                self.togglePan()
+                del self.panOnRelease
+        except AttributeError:
+            pass
 
     # Pans in xy-plane
     def mouseMoveEvent(self, ev):
@@ -358,6 +358,9 @@ class NBodyWidget(gl.GLViewWidget):
             self.prevPanPos = pos
         else:
             super().mouseMoveEvent(ev)
+            if self.isPanning:
+                self.togglePan()
+                self.panOnRelease = True
     
     # Makes a test: Calculates energy and momentum drift after num steps
     def test(self, dt, num):
