@@ -47,31 +47,14 @@ class NBodyWidget(gl.GLViewWidget):
         # Set distance to origin
         self.opts['distance'] = 35
         self.isPanning = False
-
-        # Create GridItems
-        gx0 = gl.GLGridItem()
-        gx0.setSpacing(20,20)
-        gx0.rotate(90, 0, 1, 0)
-        gx0.translate(10, 0, 0)
-        gy0 = gl.GLGridItem()
-        gy0.setSpacing(20,20)
-        gy0.rotate(90, 1, 0, 0)
-        gy0.translate(0, 10, 0)
-#        gz0 = gl.GLGridItem()
-#        gz0.setSpacing(20,20)
-#        gz0.translate(0, 0, 10)
-        gx1 = gl.GLGridItem()
-        gx1.setSpacing(20,20)
-        gx1.rotate(90, 0, 1, 0)
-        gx1.translate(-10, 0, 0)
-        gy1 = gl.GLGridItem()
-        gy1.setSpacing(20,20)
-        gy1.rotate(90, 1, 0, 0)
-        gy1.translate(0, -10, 0)
-#        gz1 = gl.GLGridItem()
-#        gz1.setSpacing(20,20)
-#        gz1.translate(0, 0, -10)
-        self.grids = [gx0, gx1, gy0, gy1]
+        
+        # Draw cube
+        corners = [[-10, -10, -10], [-10, -10, 10], [-10, 10, 10], [-10, 10, -10], [10, -10, -10], [10, -10, 10], [10, 10, 10], [10, 10, -10]]
+        cubedata = []
+        for i in range(4):
+            cubedata += [corners[i], corners[(i+1)%4], corners[i+4], corners[(i+1)%4+4], corners[i],corners[i+4]]
+        self.cube = gl.GLLinePlotItem()
+        self.cube.setData(pos = np.array(cubedata), antialias = True, mode = 'lines', width = 0.5)
 
         # Initial size (position of size-slider)
         self.size = 75
@@ -189,13 +172,12 @@ class NBodyWidget(gl.GLViewWidget):
             self.removeItem(self.sp)
             self.setupLinePlot()
     
-    # Toggle grid
-    def toggleGrid(self):
-        for grid in self.grids:
-            if grid in self.items:
-                self.removeItem(grid)
-            else:
-                self.addItem(grid)
+    # Toggle cube
+    def toggleCube(self):
+        if self.cube in self.items:
+            self.removeItem(self.cube)
+        else:
+            self.addItem(self.cube)
     
     # Toggle colors
     def toggleColors(self):
@@ -545,7 +527,7 @@ class MainWindow(QtGui.QMainWindow):
                             QtCore.Qt.Key_C: self.keyPressC,
                             QtCore.Qt.Key_S: self.window.GLWidget.toggleTimer,
                             QtCore.Qt.Key_L: self.window.GLWidget.togglePlot,
-                            QtCore.Qt.Key_G: self.window.GLWidget.toggleGrid,
+                            QtCore.Qt.Key_G: self.window.GLWidget.toggleCube,
                             QtCore.Qt.Key_N: self.window.GLWidget.toggleColors,
                             QtCore.Qt.Key_Q: self.window.GLWidget.resetCenter,
                             QtCore.Qt.Key_E: self.keyPressE,
