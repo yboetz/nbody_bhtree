@@ -2,6 +2,7 @@
 #include <math.h>
 #include <vector>
 #include <immintrin.h>
+#include <omp.h>
 #include <chrono>
 
 //#define _mm256_set_m128(va, vb) _mm256_insertf128_ps(_mm256_castps128_ps256(va), vb, 1)
@@ -186,6 +187,7 @@ class Octree
         float theta;
         float eps;
         double T;
+        int numThreads;
 
         Octree(float*, float*, int, int, float, float);
         ~Octree();
@@ -211,6 +213,9 @@ class Octree
 // Constructor. Sets position, velocity, number of bodies, opening angle and softening length. Initializes Cell & Leaf vectors
 Octree::Octree(float* p, float* v, int n,  int ncrit, float th, float e)
     {
+    numThreads = omp_get_num_procs();
+    numThreads = numThreads>1 ? numThreads-1 : numThreads;
+
     pos = p;
     vel = v;
     N = n;
@@ -418,7 +423,7 @@ float Octree::energy()
     
     const int cSize = critCells.size();
     
-    #pragma omp parallel
+    #pragma omp parallel num_threads(numThreads)
     {
     std::vector<__m128> list (listCapacity);
     float _V = 0;
@@ -532,7 +537,7 @@ void Octree::integrate(float dt)
     __m256 epsv = _mm256_set1_ps(eps);
     const int cSize = critCells.size();
     
-    #pragma omp parallel
+    #pragma omp parallel num_threads(numThreads)
     {
     std::vector<__m128> list (listCapacity);
     
