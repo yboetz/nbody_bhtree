@@ -13,6 +13,7 @@ import pyqtgraph as pg
 from math import ceil
 from time import time
 from pandas import read_csv
+import os
 
 # Calculates centre of momentum
 def centreOfMomentum(vel, masses):
@@ -81,7 +82,7 @@ class NBodyWidget(gl.GLViewWidget):
         self.timer.timeout.connect(self.fpsCounter)
         
         # Initial read in of positions and velocity from file. Creates octree
-        self.readFile('/home/somebody/Documents/Coding/Python/N-body_BHTree/Data/Plummer/Plummer_4096')
+        self.readFile(os.path.join(os.getcwd(),'Data/Plummer/Plummer_4096'))
     
     # renderText has to be called inside paintGL
     def paintGL(self, *args, **kwds):
@@ -510,7 +511,7 @@ class MainWindow(QtGui.QMainWindow):
 #        self.statusBar()
         # Menubar entries
         openFile = QtGui.QAction(QtGui.QIcon('open.png'), 'Open file', self)
-        openFile.setShortcut('O')
+        #openFile.setShortcut('O')
         openFile.setStatusTip('Read data from file')
         openFile.triggered.connect(self.showDialog)  
         closeApp = QtGui.QAction(QtGui.QIcon('quit.png'), 'Quit', self)
@@ -524,6 +525,7 @@ class MainWindow(QtGui.QMainWindow):
         fileMenu.addAction(closeApp)
         # Defines which function to call at what keypress
         self.keyList = {
+                            QtCore.Qt.Key_O: self.showDialog,
                             QtCore.Qt.Key_C: self.keyPressC,
                             QtCore.Qt.Key_S: self.window.GLWidget.toggleTimer,
                             QtCore.Qt.Key_L: self.window.GLWidget.togglePlot,
@@ -543,7 +545,7 @@ class MainWindow(QtGui.QMainWindow):
             self.window.GLWidget.timer.stop()
         path = QtGui.QFileDialog.getOpenFileName(self, 'Open file','Data/')
         if path:
-            self.window.GLWidget.readFile(path)
+            self.window.GLWidget.readFile(path[0])
     
     # Functions to call when key is pressed
     def keyPressC(self):
