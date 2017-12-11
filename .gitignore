@@ -1,28 +1,5 @@
-Data/
-Merger_16384.png
-Octree.cpp
-Octree.cpp~
-Octree.cpython-34m.so
-Octree.h~
-OctreeMod.h~
-OctreeNew.h~
-OctreeOld.h~
-OctreeSSE.h~
-OctreeSSE_old.h~
-OctreeThread.h~
-Octree_Old_SimpleOpening.h~
-Old versions/
-QuadTree.h~
-Quadtree.h~
-Reading/
-Unused functions.cpp
-Unused functions.cpp~
-accel512.cpp
-accel512.cpp~
+data/
+unused/
+reading/
 build/
-main.cpp
-main.cpp~
-main.out
-scales
-scales~
-setup.py~
+Octree.cpp
