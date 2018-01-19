@@ -6,7 +6,7 @@ Created on Mon Apr 13 09:38:23 2015
 """
 
 import numpy as np
-from Octree import OTree
+from octree import OTree as Octree
 import pyqtgraph.opengl as gl
 from pyqtgraph.Qt import QtCore, QtGui
 import pyqtgraph as pg
@@ -276,7 +276,7 @@ class NBodyWidget(gl.GLViewWidget):
         except Exception:
             print('Read error. Data should be aligned as \'m x y z vx vy vz\'.')
         else:
-            self.oct = OTree(self.pos, self.vel, self.n, self.Ncrit, self.theta, self.e)
+            self.oct = Octree(self.pos, self.vel, self.n, self.Ncrit, self.theta, self.e)
             self.resetColors()
             self.setupRecording("del")
             self.setSize(self.size)
