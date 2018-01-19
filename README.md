@@ -8,7 +8,7 @@ On an Intel i7-6700K one million particles can be simulated at more than one tim
 
 #### Requirements ####
 
-You need python 3 with the following packages:
+You need python 3.x with the following packages:
 
     Cython
     numpy
@@ -46,6 +46,7 @@ Finally start the widget
 #### Key controls ####
 
 Basic controls:
+
 + S - starts/stops the simulation
 + N - toggles colors of particles
 + L - toggles between dots and lines for particles
@@ -54,12 +55,14 @@ Basic controls:
 + Esc - close widget
 
 Moving around:
+
 + Click & drag - rotate around center
 + Wheel or shift & drag - zoom in/out
 + Ctrl & drag - pan around
 + Q - recenter to center of mass
 
 Simulation controls:
+
 + R - plot the energy and angular momentum evolution
 + E - print the energy and angular momentum to terminal
 + C - print the center of mass to terminal
