@@ -82,7 +82,7 @@ class NBodyWidget(gl.GLViewWidget):
         self.timer.timeout.connect(self.fpsCounter)
         
         # Initial read in of positions and velocity from file. Creates octree
-        self.readFile(os.path.join(os.getcwd(),'Data/Plummer/Plummer_4096'))
+        self.readFile(os.path.join(os.getcwd(),'data/Plummer/Plummer_4096'))
     
     # renderText has to be called inside paintGL
     def paintGL(self, *args, **kwds):
@@ -327,7 +327,8 @@ class NBodyWidget(gl.GLViewWidget):
                 self.prevZoomPos = y
                 return
             dy = y - self.prevZoomPos
-            ev.delta = lambda: -dy * 5
+            #ev.delta = lambda: -dy * 5
+            ev.angleDelta = lambda: QtCore.QPoint(0, -dy * 5)
             self.prevZoomPos = y
             self.wheelEvent(ev)
         elif ctrl:
@@ -543,7 +544,7 @@ class MainWindow(QtGui.QMainWindow):
     def showDialog(self):
         if self.window.GLWidget.timer.isActive():
             self.window.GLWidget.timer.stop()
-        path = QtGui.QFileDialog.getOpenFileName(self, 'Open file','Data/')
+        path = QtGui.QFileDialog.getOpenFileName(self, 'Open file','data/')
         if path:
             self.window.GLWidget.readFile(path[0])
     
