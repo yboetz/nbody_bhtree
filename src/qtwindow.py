@@ -5,20 +5,20 @@ Created on Fri Jan 19 21:40:41 2018
 @author: yboetz
 """
 
-import numpy as np
-from octree import OTree as Octree
-import pyqtgraph.opengl as gl
-from pyqtgraph.Qt import QtCore, QtGui
-import pyqtgraph as pg
+import os
 from math import ceil
 from time import time
+import numpy as np
+import pyqtgraph as pg
+import pyqtgraph.opengl as gl
+from pyqtgraph.Qt import QtCore, QtGui
 from pandas import read_csv
-import os
 from utils import centreOfMomentum, centreOfMass
+from octree import OTree as Octree
 
 
-# GL widget class to display nbody data
 class NBodyWidget(gl.GLViewWidget):
+    """GL widget class to display nbody data. Stores the octree and all data about the simulation"""
     def __init__(self):
         super().__init__()
 
@@ -51,8 +51,8 @@ class NBodyWidget(gl.GLViewWidget):
         # Initial line length
         self.lineLength = 2
         # Set colors
-        self.colors = (1,1,.5,1)
-        self.lineColors = (1,1,.5,1)
+        self.colors = (1, 1, .5, 1)
+        self.lineColors = (1, 1, .5, 1)
         self.isColored = False
 
         # Create scatterplot with position data. Needs 3-vectors, self.pos is 4-aligned
@@ -60,7 +60,7 @@ class NBodyWidget(gl.GLViewWidget):
         self.addItem(self.sp)
         # Create lineplot
         self.lp = gl.GLLinePlotItem()
-        
+
         # Timer which calls update function at const framerate
         self.timer = QtCore.QTimer()
         self.timer.timeout.connect(self.updateData)
@@ -69,10 +69,10 @@ class NBodyWidget(gl.GLViewWidget):
         # Init fps counter
         self.fps = 1000 / self.tickRate
         self.timer.timeout.connect(self.fpsCounter)
-        
+
         # Initial read in of positions and velocity from file. Creates octree
         self.readFile(os.path.join(os.getcwd(),'../data/Plummer/Plummer_4096'))
-    
+
     # renderText has to be called inside paintGL
     def paintGL(self, *args, **kwds):
         super().paintGL(*args, **kwds)
@@ -80,32 +80,32 @@ class NBodyWidget(gl.GLViewWidget):
         self.renderText(30, 45, "N:\t%i" %(self.n))
         self.renderText(30, 60, "Step:\t%.4f " %(self.dt))
         self.renderText(30, 75, "Time:\t%.3f" %(self.oct.T))
-    
+
     # Pans around center at const rate of 2pi/min
     def cont_orbit(self):
         dp = 6 / self.fps
         self.orbit(dp,0)
-    
+
     # Integrates positions & velocities self.burst steps forward
     def updateData(self):
         self.oct.integrateNSteps(self.dt, self.burst)
-                                              
+
     # Updates scatterplot
     def updateScatterPlot(self):
-        self.sp.setData(pos=self.pos.reshape((self.n,4))[:,0:3],
-                        size = self.sizeArray, color = self.colors)
+        self.sp.setData(pos=self.pos.reshape((self.n, 4))[:,0:3],
+                        size=self.sizeArray, color=self.colors)
 
     # Updates lineplot
     def updateLinePlot(self):
         self.oct.updateLineData(self.lineData, self.lineLength)
-        self.lp.setData(pos = self.lineData, color = self.lineColors, antialias = True)
-        
+        self.lp.setData(pos=self.lineData, color=self.lineColors, antialias=True)
+
     # Setup of GLLinePlotItem
     def setupLinePlot(self):
-        self.lineData = np.empty((self.n, self.lineLength, 3), dtype = np.float32)
-        self.lineData[:,:,:] = self.pos.reshape((self.n,4))[:,None,0:3]       
-        self.lp.setData(pos = self.lineData, color = self.lineColors,
-                        antialias = True, mode = 'lines', width = 1.5)
+        self.lineData = np.empty((self.n, self.lineLength, 3), dtype=np.float32)
+        self.lineData[:,:,:] = self.pos.reshape((self.n,4))[:,None,0:3]
+        self.lp.setData(pos=self.lineData, color=self.lineColors,
+                        antialias=True, mode='lines', width=1.5)
         self.addItem(self.lp)
         self.timer.timeout.connect(self.updateLinePlot)
         if self.isColored:
@@ -120,14 +120,14 @@ class NBodyWidget(gl.GLViewWidget):
                 if self.isColored:
                     self.lineColors = np.array(self.lineColors[:,:length,:], dtype=np.float32)
             else:
-                self.lineData = np.array(np.pad(self.lineData, ((0,0),(0,length-self.lineLength),(0,0)),
-                                                'edge'), dtype=np.float32)
+                self.lineData = np.array(np.pad(self.lineData, ((0, 0), (0, length-self.lineLength),
+                                         (0, 0)), 'edge'), dtype=np.float32)
                 if self.isColored:
-                    self.lineColors = np.array(np.pad(self.lineColors, ((0,0),(0,length-self.lineLength),(0,0)),
-                                                      'edge'), dtype=np.float32)
-            self.lp.setData(pos = self.lineData, color = self.lineColors, antialias = True)
+                    self.lineColors = np.array(np.pad(self.lineColors, ((0, 0), (0, length-self.lineLength),
+                                               (0, 0)), 'edge'), dtype=np.float32)
+            self.lp.setData(pos=self.lineData, color=self.lineColors, antialias=True)
         self.lineLength = length
-        
+
     # Toggles paning
     def togglePan(self):
         if self.isPanning:
@@ -136,7 +136,7 @@ class NBodyWidget(gl.GLViewWidget):
         else:
             self.timer.timeout.connect(self.cont_orbit)
             self.isPanning = True
-        
+
     # Starts/stops timer
     def toggleTimer(self):
         if self.timer.isActive():
@@ -144,7 +144,7 @@ class NBodyWidget(gl.GLViewWidget):
         else:
             self.lastTime = time()
             self.timer.start(self.tickRate)
-    
+
     # Toggles scatter/lineplot
     def togglePlot(self):
         if self.lp in self.items:
@@ -152,96 +152,96 @@ class NBodyWidget(gl.GLViewWidget):
             self.removeItem(self.lp)
             if self.isColored:
                 self.timer.timeout.disconnect(self.updateLineColors)
-                self.lineColors = (1,1,.5,1)
+                self.lineColors = (1, 1, .5, 1)
             self.timer.timeout.connect(self.updateScatterPlot)
             self.addItem(self.sp)
-            self.sp.setData(pos=self.pos.reshape((self.n,4))[:,0:3],
-                            size = self.sizeArray, color = self.colors)
+            self.sp.setData(pos=self.pos.reshape((self.n, 4))[:,0:3],
+                            size=self.sizeArray, color=self.colors)
         else:
             self.timer.timeout.disconnect(self.updateScatterPlot)
             self.removeItem(self.sp)
             self.setupLinePlot()
-    
+
     # Toggle cube
     def toggleCube(self):
         if self.cube in self.items:
             self.removeItem(self.cube)
         else:
             self.addItem(self.cube)
-    
+
     # Toggle colors
     def toggleColors(self):
         if self.isColored:
             self.timer.timeout.disconnect(self.updateColors)
             self.isColored = False
-            self.colors = (1,1,.5,1)
+            self.colors = (1, 1, .5, 1)
             self.sp.setGLOptions('additive')
         else:
             self.timer.timeout.connect(self.updateColors)
             self.isColored = True
-            self.colors = np.empty((self.n, 4), dtype = np.float32)
+            self.colors = np.empty((self.n, 4), dtype=np.float32)
             self.updateColors()
             self.sp.setGLOptions('translucent')
         if self.sp in self.items:
-            self.sp.setData(pos=self.pos.reshape((self.n,4))[:,0:3],
-                            size = self.sizeArray, color = self.colors)
+            self.sp.setData(pos=self.pos.reshape((self.n, 4))[:,0:3],
+                            size=self.sizeArray, color=self.colors)
         self.toggleLineColors()
 
     # Toggle colors of lines
     def toggleLineColors(self):
         if self.lp in self.items:
             if self.isColored:
-                self.lineColors = np.ones((self.n, self.lineLength, 4), dtype = np.float32)
+                self.lineColors = np.ones((self.n, self.lineLength, 4), dtype=np.float32)
                 self.lineColors[:,:,2] = .5
                 self.updateLineColors()
                 self.timer.timeout.connect(self.updateLineColors)
             else:
                 self.timer.timeout.disconnect(self.updateLineColors)
-                self.lineColors = (1,1,.5,1)
-            self.lp.setData(pos = self.lineData, color = self.lineColors,
-                            antialias = True)
+                self.lineColors = (1, 1, .5, 1)
+            self.lp.setData(pos=self.lineData, color=self.lineColors,
+                            antialias=True)
 
     # Update dot color depending of current direction of travel
     def updateColors(self):
         self.oct.updateColors(self.colors)
-        
+
     # Update line colors with color at current position
     def updateLineColors(self):
         self.oct.updateLineColors(self.colors, self.lineColors, self.lineLength)
-    
+
     # Resets colors
     def resetColors(self):
         if self.isColored:
             self.isColored = False
             self.timer.timeout.disconnect(self.updateColors)
-            self.colors = (1,1,.5,1)
+            self.colors = (1, 1, .5, 1)
             self.sp.setGLOptions('additive')
             if self.lp in self.items:
                 self.timer.timeout.disconnect(self.updateLineColors)
-            self.lineColors = (1,1,.5,1)
+            self.lineColors = (1, 1, .5, 1)
 
     # Set dot size
     def setSize(self, size):
         self.size = size
         self.sizeArray = (size / 1000) * (self.pos[3::4] / np.amax(self.pos[3::4]))**(1/3)
-        self.sp.setData(pos=self.pos.reshape((self.n,4))[:,0:3],
-                        size = self.sizeArray, color = self.colors)
-    
+        self.sp.setData(pos=self.pos.reshape((self.n, 4))[:,0:3],
+                        size=self.sizeArray, color=self.colors)
+
     # Set dt
     def setdt(self, dt):
         self.dt = np.float32(dt / 10000)
-    
+
     # Set burst
     def setBurst(self, burst):
         self.burst = burst
-    
+
     # Reads in data from file
     def read(self, path):
-        data = read_csv(path, delim_whitespace=True, header = None,
-                        dtype = np.float32, keep_default_na=False)
+        data = read_csv(path, delim_whitespace=True, header=None, dtype=np.float32,
+                        keep_default_na=False)
         n = data.shape[0]
-        pos = np.zeros((n, 4), dtype = np.float32)
-        vel = np.zeros((n, 4), dtype = np.float32)
+        pos = np.zeros((n, 4), dtype=np.float32)
+        vel = np.zeros((n, 4), dtype=np.float32)
         # Read position & velocity out of csv data
         pos[:,:3] = data.ix[:,1:3]
         pos[:,3] = data.ix[:,0]
@@ -283,12 +283,12 @@ class NBodyWidget(gl.GLViewWidget):
         self.lastTime = self.now
         s = np.clip(dt*2., 0, 1)
         self.fps = self.fps * (1-s) + (1.0/dt) * s
-    
+
     # Resets camera center to (0,0,0)
     def resetCenter(self):
-        center = -self.opts['center']  
+        center = -self.opts['center']
         self.pan(center.x(), center.y(), center.z())
-    
+
     # Stores mouse position
     def mousePressEvent(self, ev):
         super().mousePressEvent(ev)
@@ -298,7 +298,7 @@ class NBodyWidget(gl.GLViewWidget):
         super().mouseReleaseEvent(ev)
         self.prevZoomPos = None
         self.prevPanPos = None
-        try:        
+        try:
             if self.panOnRelease:
                 self.togglePan()
                 del self.panOnRelease
@@ -334,48 +334,48 @@ class NBodyWidget(gl.GLViewWidget):
             if self.isPanning:
                 self.togglePan()
                 self.panOnRelease = True
-    
+
     # Makes a test: Calculates energy and momentum drift after num steps
     def test(self, dt, num):
         E0, J0 = self.oct.energy(), self.oct.angularMomentum()
-        
+
         num_per_sec = 0.5 * 10**6
         appr_T = self.n * np.log(self.n) / num_per_sec / np.log(num_per_sec) * num
         if appr_T > 10:
             ok = input('{:d} steps might take a while. Continue y/n?\n'.format(num))
-            if ok.lower() not in ['y','yes']:
+            if ok.lower() not in ['y', 'yes']:
                 return
-        
+
         print('Testing: ', end="")
         T = time()
         self.oct.integrateNSteps(np.float32(dt), num)
         T = time() - T
-        
+
         E1, J1 = self.oct.energy(), self.oct.angularMomentum()
         dE, dJ = E1 - E0, J1 - J0
         print('Did {:d} cycles in {:.3f} seconds.'.format(num, T))
-        print('E0 = {:.4f}, E1 = {:.4f}; J0 = {:.4f}, J1 = {:.4f}'.format(E0,E1,J0,J1))
+        print('E0 = {:.4f}, E1 = {:.4f}; J0 = {:.4f}, J1 = {:.4f}'.format(E0, E1, J0, J1))
         print('dE = {:.4f} = {:.4f} E0; dJ = {:.4f} = {:.4f} J0\n'.format(dE, dE / E0, dJ, dJ / J0))
-    
+
     # Initial setup/destructor of recording
-    def setupRecording(self, key = "setup"):
+    def setupRecording(self, key="setup"):
         if key == "setup":
             pg.setConfigOptions(antialias=True)
 #            pg.setConfigOption('background', 'w')
 #            pg.setConfigOption('foreground', 'k')
-            self.tData = np.empty(1000, dtype = np.float32)
-            self.eData = np.empty(1000, dtype = np.float32)
-            self.jData = np.empty(1000, dtype = np.float32)
+            self.tData = np.empty(1000, dtype=np.float32)
+            self.eData = np.empty(1000, dtype=np.float32)
+            self.jData = np.empty(1000, dtype=np.float32)
             self.tData.fill(self.oct.T)
             self.eData.fill(self.oct.energy())
             self.jData.fill(self.oct.angularMomentum())
             self.GWin = pg.GraphicsWindow(title="Conserved quantities")
-            self.GWin.resize(600,600)
+            self.GWin.resize(600, 600)
             self.GWin.ePlot = self.GWin.addPlot(title="Energy")
             self.GWin.nextRow()
             self.GWin.jPlot = self.GWin.addPlot(title="Angular momentum")
-            self.ep = self.GWin.ePlot.plot(pen=(255,0,0), name = "Energy")
-            self.jp = self.GWin.jPlot.plot(pen=(0,255,0), name = "Angular")
+            self.ep = self.GWin.ePlot.plot(pen=(255, 0, 0), name="Energy")
+            self.jp = self.GWin.jPlot.plot(pen=(0, 255, 0), name="Angular")
             self.GWin.ePlot.setMouseEnabled(False, False)
             self.GWin.jPlot.setMouseEnabled(False, False)
             self.isRecording = False
@@ -407,27 +407,27 @@ class NBodyWidget(gl.GLViewWidget):
             if self.GWin.isHidden():
                 self.toggleRecording()
             else:
-                self.tData = np.roll(self.tData,-1)
-                self.eData = np.roll(self.eData,-1)
-                self.jData = np.roll(self.jData,-1)
+                self.tData = np.roll(self.tData, -1)
+                self.eData = np.roll(self.eData, -1)
+                self.jData = np.roll(self.jData, -1)
                 self.tData[-1] = self.oct.T
                 self.eData[-1] = self.oct.energy()
                 self.jData[-1] = self.oct.angularMomentum()
-                self.ep.setData(x = self.tData, y = self.eData)
-                self.jp.setData(x = self.tData, y = self.jData)
+                self.ep.setData(x=self.tData, y=self.eData)
+                self.jp.setData(x=self.tData, y=self.jData)
         self.frame += 1
 
 
-# QWidget class with controls & NBodyWidget
 class Window(QtGui.QWidget):
+    """QWidget class with controls & NBodyWidget"""
     def __init__(self):
         super().__init__()
         self.init()
-     
-    def init(self):   
+
+    def init(self):
         grid = QtGui.QGridLayout()
         self.setLayout(grid)
-        
+
         # Initialize N-body GLWidget, buttons and sliders
         self.GLWidget = NBodyWidget()
         self.GLWidget.keyPressEvent = self.keyPressEvent
@@ -456,14 +456,14 @@ class Window(QtGui.QWidget):
         burstSlider.setMaximum(100)
         burstSlider.setValue(int(self.GLWidget.burst))
         burstSlider.valueChanged.connect(self.GLWidget.setBurst)
-        burstSliderLabel = QtGui.QLabel('Change burst', self)   
+        burstSliderLabel = QtGui.QLabel('Change burst', self)
         # Slider to change line length
         lengthSlider = QtGui.QSlider(QtCore.Qt.Horizontal, self)
         lengthSlider.setMinimum(1)
         lengthSlider.setMaximum(100)
         lengthSlider.setValue(self.GLWidget.lineLength // 2)
         lengthSlider.valueChanged.connect(self.GLWidget.setLineLength)
-        lengthSliderLabel = QtGui.QLabel('Change line length', self)  
+        lengthSliderLabel = QtGui.QLabel('Change line length', self)
         # Labels for controls
         controlLabel = QtGui.QLabel('Controls:\nS\tStart/stop\nE\tPrint energy\n'
                                     'C\tPrint COM\nN\tToggle colors\nL\tToggle dots/lines\n'
@@ -471,7 +471,7 @@ class Window(QtGui.QWidget):
                                     'Q\tReset center\nF\tFullscreen\nEsc\tClose\n\n'
                                     'Rotate\tClick&drag\nZoom\tWheel/Click&Shift\nPan\tClick&Ctrl', self)
         # Add widgets on grid
-        grid.addWidget(self.GLWidget, 1, 3, 50,50)    
+        grid.addWidget(self.GLWidget, 1, 3, 50, 50)
         grid.addWidget(startButton, 1, 2)
         grid.addWidget(closeButton, 1, 1)
         grid.addWidget(sizeSlider, 10, 1, 1, 2)
@@ -483,18 +483,19 @@ class Window(QtGui.QWidget):
         grid.addWidget(lengthSlider, 13, 1, 1, 2)
         grid.addWidget(lengthSliderLabel, 12, 1, 1, 2)
         grid.addWidget(controlLabel, 16, 1, 1, 2)
-    
-# Main window, to have file menu & statusbar
+
+
 class MainWindow(QtGui.QMainWindow):
+    """Main window with file menu & statusbar"""
     def __init__(self):
         super().__init__()
         self.init()
         self.show()
-        
+
     def init(self):
         self.resize(1536, 960)
         self.setWindowTitle('N-body simulation')
-        
+
         self.window = Window()
         self.window.keyPressEvent = self.keyPressEvent
         self.setCentralWidget(self.window)
@@ -503,7 +504,7 @@ class MainWindow(QtGui.QMainWindow):
         openFile = QtGui.QAction(QtGui.QIcon('open.png'), 'Open file', self)
         #openFile.setShortcut('O')
         openFile.setStatusTip('Read data from file')
-        openFile.triggered.connect(self.showDialog)  
+        openFile.triggered.connect(self.showDialog)
         closeApp = QtGui.QAction(QtGui.QIcon('quit.png'), 'Quit', self)
         closeApp.setShortcut('Escape')
         closeApp.setStatusTip('Exits application')
@@ -511,23 +512,23 @@ class MainWindow(QtGui.QMainWindow):
         # Add menubar
         menubar = self.menuBar()
         fileMenu = menubar.addMenu('&File')
-        fileMenu.addAction(openFile)  
+        fileMenu.addAction(openFile)
         fileMenu.addAction(closeApp)
         # Defines which function to call at what keypress
         self.keyList = {
-                            QtCore.Qt.Key_O: self.showDialog,
-                            QtCore.Qt.Key_C: self.keyPressC,
-                            QtCore.Qt.Key_S: self.window.GLWidget.toggleTimer,
-                            QtCore.Qt.Key_L: self.window.GLWidget.togglePlot,
-                            QtCore.Qt.Key_G: self.window.GLWidget.toggleCube,
-                            QtCore.Qt.Key_N: self.window.GLWidget.toggleColors,
-                            QtCore.Qt.Key_Q: self.window.GLWidget.resetCenter,
-                            QtCore.Qt.Key_E: self.keyPressE,
-                            QtCore.Qt.Key_R: self.window.GLWidget.toggleRecording,
-                            QtCore.Qt.Key_T: self.keyPressT,
-                            QtCore.Qt.Key_F: self.toggleFullScreen,
-                            QtCore.Qt.Key_P: self.window.GLWidget.togglePan
-                            }
+                        QtCore.Qt.Key_O: self.showDialog,
+                        QtCore.Qt.Key_C: self.keyPressC,
+                        QtCore.Qt.Key_S: self.window.GLWidget.toggleTimer,
+                        QtCore.Qt.Key_L: self.window.GLWidget.togglePlot,
+                        QtCore.Qt.Key_G: self.window.GLWidget.toggleCube,
+                        QtCore.Qt.Key_N: self.window.GLWidget.toggleColors,
+                        QtCore.Qt.Key_Q: self.window.GLWidget.resetCenter,
+                        QtCore.Qt.Key_E: self.keyPressE,
+                        QtCore.Qt.Key_R: self.window.GLWidget.toggleRecording,
+                        QtCore.Qt.Key_T: self.keyPressT,
+                        QtCore.Qt.Key_F: self.toggleFullScreen,
+                        QtCore.Qt.Key_P: self.window.GLWidget.togglePan
+                        }
 
     # Show file dialog and calls file read function
     def showDialog(self):
