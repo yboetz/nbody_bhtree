@@ -2,4 +2,6 @@ data/
 unused/
 reading/
 build/
-Octree.cpp
+__pycache__/
+octree.cpp
+*.so
