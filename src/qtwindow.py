@@ -1,8 +1,8 @@
 # -*- coding: utf-8 -*-
 """
-Created on Mon Apr 13 09:38:23 2015
+Created on Fri Jan 19 21:40:41 2018
 
-@author: somebody
+@author: yboetz
 """
 
 import numpy as np
@@ -14,19 +14,8 @@ from math import ceil
 from time import time
 from pandas import read_csv
 import os
+from utils import centreOfMomentum, centreOfMass
 
-# Calculates centre of momentum
-def centreOfMomentum(vel, masses):
-    com = np.einsum('ij,i',vel[:,:3],masses)
-    M = np.einsum('i->', masses)
-    return com / M
-
-# Calculates centre of mass
-def centreOfMass(pos):
-    masses = pos[:,3]
-    com = np.einsum('ij,i',pos[:,:3],masses)
-    M = np.einsum('i->', masses)
-    return com / M
 
 # GL widget class to display nbody data
 class NBodyWidget(gl.GLViewWidget):
@@ -48,14 +37,14 @@ class NBodyWidget(gl.GLViewWidget):
         # Set distance to origin
         self.opts['distance'] = 35
         self.isPanning = False
-        
+
         # Draw cube
         corners = [[-10, -10, -10], [-10, -10, 10], [-10, 10, 10], [-10, 10, -10], [10, -10, -10], [10, -10, 10], [10, 10, 10], [10, 10, -10]]
         cubedata = []
         for i in range(4):
-            cubedata += [corners[i], corners[(i+1)%4], corners[i+4], corners[(i+1)%4+4], corners[i],corners[i+4]]
+            cubedata += [corners[i], corners[(i+1)%4], corners[i+4], corners[(i+1)%4+4], corners[i], corners[i+4]]
         self.cube = gl.GLLinePlotItem()
-        self.cube.setData(pos = np.array(cubedata), antialias = True, mode = 'lines', width = 0.5)
+        self.cube.setData(pos=np.array(cubedata), antialias=True, mode='lines', width=0.5)
 
         # Initial size (position of size-slider)
         self.size = 75
@@ -82,7 +71,7 @@ class NBodyWidget(gl.GLViewWidget):
         self.timer.timeout.connect(self.fpsCounter)
         
         # Initial read in of positions and velocity from file. Creates octree
-        self.readFile(os.path.join(os.getcwd(),'data/Plummer/Plummer_4096'))
+        self.readFile(os.path.join(os.getcwd(),'../data/Plummer/Plummer_4096'))
     
     # renderText has to be called inside paintGL
     def paintGL(self, *args, **kwds):
@@ -544,7 +533,7 @@ class MainWindow(QtGui.QMainWindow):
     def showDialog(self):
         if self.window.GLWidget.timer.isActive():
             self.window.GLWidget.timer.stop()
-        path = QtGui.QFileDialog.getOpenFileName(self, 'Open file','data/')
+        path = QtGui.QFileDialog.getOpenFileName(self, 'Open file','../data/')
         if path:
             self.window.GLWidget.readFile(path[0])
     
@@ -588,12 +577,3 @@ class MainWindow(QtGui.QMainWindow):
             pass
         else:
             self.keyList.get(e.key(), self.doNothing)()
-
-
-if __name__ == "__main__":
-    # Start Qt applicatoin
-    app = QtGui.QApplication([])
-    # Create main window
-    win = MainWindow()
-    app.exec()
-    pg.exit()
