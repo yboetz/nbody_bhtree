@@ -6,6 +6,7 @@ Created on Fri Jan 19 21:40:41 2018
 """
 
 import os
+import h5py
 from math import ceil
 from time import time
 import numpy as np
@@ -236,15 +237,15 @@ class NBodyWidget(gl.GLViewWidget):
         self.burst = burst
 
     # Reads in data from file
-    def read(self, path):
+    def read_from_csv(self, path):
         data = read_csv(path, delim_whitespace=True, header=None, dtype=np.float32,
                         keep_default_na=False)
         n = data.shape[0]
         pos = np.zeros((n, 4), dtype=np.float32)
         vel = np.zeros((n, 4), dtype=np.float32)
         # Read position & velocity out of csv data
-        pos[:,:3] = data.ix[:,1:3]
         pos[:,3] = data.ix[:,0]
+        pos[:,:3] = data.ix[:,1:3]
         vel[:,:3] = data.ix[:,4:6]
         # Go to centre of mass & momentum system
         pos[:,:3] -= centreOfMass(pos)
@@ -254,12 +255,34 @@ class NBodyWidget(gl.GLViewWidget):
         self.vel = vel.reshape(4*n)
         self.n = n
 
+    # Reads in data from hdf5 file
+    def read_from_hdf5(self, name):
+        with h5py.File('../data/data.h5', 'r') as file:
+            dset = file[name]
+            n = dset.attrs['n']
+            pos = np.zeros((n, 4), dtype=np.float32)
+            vel = np.zeros((n, 4), dtype=np.float32)
+            # Read position & velocity out of csv data
+            pos[:,3] = dset['mass']
+            pos[:,:3] = dset['position']
+            vel[:,:3] = dset['velocity']
+            # Go to centre of mass & momentum system
+            pos[:,:3] -= centreOfMass(pos)
+            vel[:,:3] -= centreOfMomentum(vel, pos[:,3])
+            # Copy data to class variables
+            self.pos = pos.reshape(4*n)
+            self.vel = vel.reshape(4*n)
+            self.n = n
+
     # Reads a new file and sets up new octree class. Resets colors and plots
-    def readFile(self, path):
+    def readFile(self, path, csv=True):
         if self.timer.isActive():
             self.timer.stop()
         try:
-            self.read(path)
+            if csv:
+                self.read_from_csv(path)
+            else:
+                self.read_from_hdf5(path)
         except OSError as error:
             print(error)
         except Exception:
@@ -464,6 +487,14 @@ class Window(QtGui.QWidget):
         lengthSlider.setValue(self.GLWidget.lineLength // 2)
         lengthSlider.valueChanged.connect(self.GLWidget.setLineLength)
         lengthSliderLabel = QtGui.QLabel('Change line length', self)
+        # Data list widget
+        dataList = QtGui.QListWidget(self)
+        with h5py.File('../data/data.h5', 'r') as file:
+            for name, dset in file.items():
+                item = QtGui.QListWidgetItem(name)
+                dataList.addItem(item)
+        dataListLabel = QtGui.QLabel('Datasets:', self)
+        dataList.currentItemChanged.connect(lambda x: self.GLWidget.readFile(x.text(), csv=False))
         # Labels for controls
         controlLabel = QtGui.QLabel('Controls:\nS\tStart/stop\nE\tPrint energy\n'
                                     'C\tPrint COM\nN\tToggle colors\nL\tToggle dots/lines\n'
@@ -483,6 +514,8 @@ class Window(QtGui.QWidget):
         grid.addWidget(lengthSlider, 13, 1, 1, 2)
         grid.addWidget(lengthSliderLabel, 12, 1, 1, 2)
         grid.addWidget(controlLabel, 16, 1, 1, 2)
+        grid.addWidget(dataList, 20, 1, 1, 2)
+        grid.addWidget(dataListLabel, 19, 1, 1, 2)
 
 
 class MainWindow(QtGui.QMainWindow):
