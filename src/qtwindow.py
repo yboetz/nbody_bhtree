@@ -278,7 +278,7 @@ class NBodyWidget(gl.GLViewWidget):
         self.n = n
 
     # Reads a new file and sets up new octree class. Resets colors and plots
-    def readFile(self, path, csv=True, num=8192):
+    def readFile(self, path, csv=False, num=8192):
         if self.timer.isActive():
             self.timer.stop()
         try:
@@ -508,13 +508,14 @@ class Window(QtGui.QWidget):
                 item = QtGui.QListWidgetItem(name)
                 dataList.addItem(item)
                 if name == self.GLWidget.dataPath['path']:
-                    dataList.setCurrentItem(item)
-        dataListLabel = QtGui.QLabel('Datasets:', self)
+                    dataList.setCurrentItem(item) # sets selection at startup
+        # when selection is changed, read in new data from hdf5 file
         dataList.currentItemChanged.connect(lambda x: self.GLWidget.readFile(x.text(), csv=False,
                                             num=self.GLWidget.n))
-        # Widget to st number of points
+        dataListLabel = QtGui.QLabel('Datasets:', self)
+        # Widget to set number of points
         numWidget = QtGui.QLineEdit(self)
-        numWidget.setText('8192')
+        numWidget.setText(str(self.GLWidget.n))
         numWidget.editingFinished.connect(lambda: self.GLWidget.changeNum(numWidget.text()))
         numWidgetLabel = QtGui.QLabel('Max. number of bodies:', self)
         # Labels for controls
