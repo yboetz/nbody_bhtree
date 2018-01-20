@@ -72,7 +72,8 @@ class NBodyWidget(gl.GLViewWidget):
         self.timer.timeout.connect(self.fpsCounter)
 
         # Initial read in of positions and velocity from file. Creates octree
-        self.readFile('plummer', csv=False)
+        self.dataPath = {'path': 'plummer', 'csv': False}
+        self.readFile(**self.dataPath)
 
     # renderText has to be called inside paintGL
     def paintGL(self, *args, **kwds):
@@ -236,17 +237,38 @@ class NBodyWidget(gl.GLViewWidget):
     def setBurst(self, burst):
         self.burst = burst
 
-    # Reads in data from file
-    def read_from_csv(self, path):
-        data = read_csv(path, delim_whitespace=True, header=None, dtype=np.float32,
-                        keep_default_na=False)
-        n = data.shape[0]
+    # Reads in data from hdf5 or csv file
+    def read(self, path, csv=False, num=8192):
+        if csv:
+            data = read_csv(path, delim_whitespace=True, header=None, dtype=np.float32,
+                            keep_default_na=False)
+            m = data.ix[:,0].values
+            p = data.ix[:,1:3].values
+            v = data.ix[:,4:6].values
+        else:
+            dirname = os.path.dirname(os.path.realpath(__file__))
+            with h5py.File(os.path.join(dirname, '../data/data.h5'), 'r') as file:
+                dset = file[path]
+                m = dset['mass']
+                p = dset['position']
+                v = dset['velocity']
+        # max number of bodies is given by len(m), min number is 1
+        n = max(min(len(m), num), 1)
         pos = np.zeros((n, 4), dtype=np.float32)
         vel = np.zeros((n, 4), dtype=np.float32)
-        # Read position & velocity out of csv data
-        pos[:,3] = data.ix[:,0]
-        pos[:,:3] = data.ix[:,1:3]
-        vel[:,:3] = data.ix[:,4:6]
+        # solar_system needs first 20 bodies (sun & planets)
+        if 'solar_system' in path:
+            if n >= 20:
+                mask = np.concatenate((np.arange(0, 20), np.linspace(20, len(m), n - 20, endpoint=False, dtype=int)))
+            else:
+                mask = np.arange(0, n)
+        else:
+            mask = np.linspace(0, len(m), n, endpoint=False, dtype=int)
+            m = m * len(m) / n # rescale masses for lower number of bodies
+        # Mask out masses, positions & velocities
+        pos[:,3] = m[mask]
+        pos[:,:3] = p[mask]
+        vel[:,:3] = v[mask]
         # Go to centre of mass & momentum system
         pos[:,:3] -= centreOfMass(pos)
         vel[:,:3] -= centreOfMomentum(vel, pos[:,3])
@@ -255,38 +277,16 @@ class NBodyWidget(gl.GLViewWidget):
         self.vel = vel.reshape(4*n)
         self.n = n
 
-    # Reads in data from hdf5 file
-    def read_from_hdf5(self, name):
-        path = os.path.dirname(os.path.realpath(__file__))
-        with h5py.File(os.path.join(path, '../data/data.h5'), 'r') as file:
-            dset = file[name]
-            n = dset.attrs['n']
-            pos = np.zeros((n, 4), dtype=np.float32)
-            vel = np.zeros((n, 4), dtype=np.float32)
-            # Read position & velocity out of csv data
-            pos[:,3] = dset['mass']
-            pos[:,:3] = dset['position']
-            vel[:,:3] = dset['velocity']
-            # Go to centre of mass & momentum system
-            pos[:,:3] -= centreOfMass(pos)
-            vel[:,:3] -= centreOfMomentum(vel, pos[:,3])
-            # Copy data to class variables
-            self.pos = pos.reshape(4*n)
-            self.vel = vel.reshape(4*n)
-            self.n = n
-
     # Reads a new file and sets up new octree class. Resets colors and plots
-    def readFile(self, path, csv=True):
+    def readFile(self, path, csv=True, num=8192):
         if self.timer.isActive():
             self.timer.stop()
         try:
-            if csv:
-                self.read_from_csv(path)
-            else:
-                self.read_from_hdf5(path)
+            self.read(path, csv=csv, num=num)
         except OSError as error:
             print(error)
-        except Exception:
+        except Exception as e:
+            print(e)
             print('Read error. Data should be aligned as \'m x y z vx vy vz\'.')
         else:
             self.oct = Octree(self.pos, self.vel, self.n, self.Ncrit, self.theta, self.e)
@@ -295,10 +295,22 @@ class NBodyWidget(gl.GLViewWidget):
             self.setSize(self.size)
             self.resetCenter()
             self.lineData = None
+            self.dataPath = {'path': path, 'csv': csv}
             if self.lp in self.items:
                 self.togglePlot()
             if self.isPanning:
                 self.togglePan()
+
+    # Change number of bodies
+    def changeNum(self, num):
+        try:
+            num = int(num)
+        except ValueError:
+            return
+        if self.n == num:
+            return
+        else:
+            self.readFile(num=num, **self.dataPath)
 
     # Calculates current fps
     def fpsCounter(self):
@@ -495,8 +507,16 @@ class Window(QtGui.QWidget):
             for name, dset in file.items():
                 item = QtGui.QListWidgetItem(name)
                 dataList.addItem(item)
+                if name == self.GLWidget.dataPath['path']:
+                    dataList.setCurrentItem(item)
         dataListLabel = QtGui.QLabel('Datasets:', self)
-        dataList.currentItemChanged.connect(lambda x: self.GLWidget.readFile(x.text(), csv=False))
+        dataList.currentItemChanged.connect(lambda x: self.GLWidget.readFile(x.text(), csv=False,
+                                            num=self.GLWidget.n))
+        # Widget to st number of points
+        numWidget = QtGui.QLineEdit(self)
+        numWidget.setText('8192')
+        numWidget.editingFinished.connect(lambda: self.GLWidget.changeNum(numWidget.text()))
+        numWidgetLabel = QtGui.QLabel('Max. number of bodies:', self)
         # Labels for controls
         controlLabel = QtGui.QLabel('Controls:\nS\tStart/stop\nE\tPrint energy\n'
                                     'C\tPrint COM\nN\tToggle colors\nL\tToggle dots/lines\n'
@@ -515,9 +535,11 @@ class Window(QtGui.QWidget):
         grid.addWidget(burstSliderLabel, 3, 1, 1, 2)
         grid.addWidget(lengthSlider, 13, 1, 1, 2)
         grid.addWidget(lengthSliderLabel, 12, 1, 1, 2)
-        grid.addWidget(controlLabel, 16, 1, 1, 2)
-        grid.addWidget(dataList, 20, 1, 1, 2)
-        grid.addWidget(dataListLabel, 19, 1, 1, 2)
+        grid.addWidget(numWidget, 15, 1, 1, 2)
+        grid.addWidget(numWidgetLabel, 14, 1, 1, 2)
+        grid.addWidget(dataList, 17, 1, 1, 2)
+        grid.addWidget(dataListLabel, 16, 1, 1, 2)
+        grid.addWidget(controlLabel, 20, 1, 1, 2)
 
 
 class MainWindow(QtGui.QMainWindow):
@@ -571,7 +593,7 @@ class MainWindow(QtGui.QMainWindow):
             self.window.GLWidget.timer.stop()
         path = QtGui.QFileDialog.getOpenFileName(self, 'Open file','../data/')
         if path:
-            self.window.GLWidget.readFile(path[0])
+            self.window.GLWidget.readFile(path[0], csv=True, num=self.window.GLWidget.n)
     
     # Functions to call when key is pressed
     def keyPressC(self):
