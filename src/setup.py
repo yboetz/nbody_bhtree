@@ -2,7 +2,7 @@
 """
 Created on Wed May  6 15:53:12 2015
 
-@author: somebody
+@author: yboetz
 """
 
 from distutils.core import setup

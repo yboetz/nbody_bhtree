@@ -26,7 +26,7 @@ so you don't clutter your system python installation with additional packages.
 
 Clone the git repository
 
-    git clone git@github.com:cythoning/nbody_bhtree.git
+    git clone git@github.com:yboetz/nbody_bhtree.git
 
 Then install the required python packages (best in your virtualenv)
 
