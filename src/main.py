@@ -1,4 +1,4 @@
-#!/home/yboetz/.virtualenvs/pyznap/bin/python
+#!/usr/bin/env python
 # -*- coding: utf-8 -*-
 """
 Created on Mon Apr 13 09:38:23 2015
