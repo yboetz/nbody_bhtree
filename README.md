@@ -17,6 +17,7 @@ You need python 3.x with the following packages:
     PyOpenGL-accelerate
     PyQt5
     pyqtgraph
+    h5py
 
 I suggest installing [virtualenv & virtualenvwrapper](http://docs.python-guide.org/en/latest/dev/virtualenvs/),
 so you don't clutter your system python installation with additional packages.
