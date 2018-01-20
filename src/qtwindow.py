@@ -72,7 +72,7 @@ class NBodyWidget(gl.GLViewWidget):
         self.timer.timeout.connect(self.fpsCounter)
 
         # Initial read in of positions and velocity from file. Creates octree
-        self.readFile(os.path.join(os.getcwd(),'../data/Plummer/Plummer_4096'))
+        self.readFile('plummer', csv=False)
 
     # renderText has to be called inside paintGL
     def paintGL(self, *args, **kwds):
@@ -257,7 +257,8 @@ class NBodyWidget(gl.GLViewWidget):
 
     # Reads in data from hdf5 file
     def read_from_hdf5(self, name):
-        with h5py.File('../data/data.h5', 'r') as file:
+        path = os.path.dirname(os.path.realpath(__file__))
+        with h5py.File(os.path.join(path, '../data/data.h5'), 'r') as file:
             dset = file[name]
             n = dset.attrs['n']
             pos = np.zeros((n, 4), dtype=np.float32)
@@ -489,7 +490,8 @@ class Window(QtGui.QWidget):
         lengthSliderLabel = QtGui.QLabel('Change line length', self)
         # Data list widget
         dataList = QtGui.QListWidget(self)
-        with h5py.File('../data/data.h5', 'r') as file:
+        path = os.path.dirname(os.path.realpath(__file__))
+        with h5py.File(os.path.join(path, '../data/data.h5'), 'r') as file:
             for name, dset in file.items():
                 item = QtGui.QListWidgetItem(name)
                 dataList.addItem(item)
