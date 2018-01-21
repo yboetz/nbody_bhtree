@@ -53,6 +53,8 @@ Basic controls:
 + L - toggles between dots and lines for particles
 + O - opens a window to load another data file
 + F - fullscreen
++ G - show cube
++ P - cont. pan aroung center
 + Esc - close widget
 
 Moving around:
