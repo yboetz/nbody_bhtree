@@ -1,215 +1,14 @@
 #include <iostream>
-#include <math.h>
 #include <vector>
-#include <immintrin.h>
+#include <x86intrin.h>
 #include <omp.h>
-#include <chrono>
+#include "octree_mod.h"
+#include "accel.cpp"
+#include "utils.cpp"
+#include "node.cpp"
 
-//#define _mm256_set_m128(va, vb) _mm256_insertf128_ps(_mm256_castps128_ps256(va), vb, 1)
-#define _mm256_set_m128(va, vb) _mm256_permute2f128_ps(_mm256_castps128_ps256(va),_mm256_castps128_ps256(vb),0b00100000);
+#pragma GCC diagnostic ignored "-Wignored-attributes"
 
-//// Returns 1 if a == b, 0 if a != b
-//inline bool equal_ps(__m128 a, __m128 b)
-//    {
-//    __m128i tmp = (__m128i)(_mm_xor_ps(a,b));
-//    return _mm_test_all_zeros(tmp, tmp);
-//    }
-// Calculates cross product of vectors a & b. Last element is set to zero
-inline __m128 cross_ps(__m128 a, __m128 b)
-    {
-    __m128 res = _mm_sub_ps(
-                            _mm_mul_ps(a,_mm_permute_ps(b,_MM_SHUFFLE(3,0,2,1))),
-                            _mm_mul_ps(b,_mm_permute_ps(a,_MM_SHUFFLE(3,0,2,1)))
-                            );
-    return _mm_permute_ps(res,_MM_SHUFFLE(3,0,2,1));
-    }
-// Calculates acceleration on p1 by two points in p2
-inline __m128 accel(__m256 p1, __m256 p2, __m256 eps)
-    {
-    __m256 a = _mm256_sub_ps(p2,p1);
-    __m256 m = _mm256_permute_ps(p2,0b11111111);
-
-    __m256 f = _mm256_blend_ps(a,eps,0b10001000);
-    f = _mm256_dp_ps(f,f,0b11111111);
-
-    f = _mm256_mul_ps(f,_mm256_mul_ps(f,f));
-    f = _mm256_rsqrt_ps(f);
-    f = _mm256_mul_ps(m,f);
-    a = _mm256_mul_ps(f,a);
-
-    a = _mm256_add_ps(a,_mm256_permute2f128_ps(a,a,1));
-    return _mm256_castps256_ps128(a);
-    }
-// Calculates potential between p1 and two points in p2
-inline float pot(__m256 p1, __m256 p2)
-    {
-    __m256 mask = _mm256_castsi256_ps(_mm256_cmpeq_epi64(_mm256_castps_si256(p1),_mm256_castps_si256(p2)));
-    mask = _mm256_and_ps(mask,_mm256_permute_ps(mask,0b01001110));
-
-    __m256 d = _mm256_sub_ps(p2,p1);
-    __m256 m = _mm256_mul_ps(_mm256_permute_ps(p1,0b11111111),_mm256_permute_ps(p2,0b11111111));
-
-    d = _mm256_dp_ps(d,d,0b01111111);
-    d = _mm256_rsqrt_ps(d);
-    d = _mm256_mul_ps(m,d);
-
-    d = _mm256_andnot_ps(mask,d);
-    d = _mm256_add_ps(d,_mm256_permute2f128_ps(d,d,1));
-    return -d[0];
-    }
-// Returns distance between p1 & p2
-inline float dist(__m128 p1, __m128 p2)
-    {
-    __m128 d = _mm_sub_ps(p2,p1);
-    d = _mm_dp_ps(d,d,0b01111111);
-    d = _mm_sqrt_ps(d);
-
-    return d[0];
-    }
-// Returns cooked distance between center of mass & midpoint (max norm - side/2)
-inline float cdist(__m128 midp, __m128 p)
-    {
-    __m128 res = _mm_sub_ps(p, midp);
-    res = _mm_and_ps(_mm_castsi128_ps(_mm_set1_epi32(0x7fffffff)),res);
-    res = _mm_max_ps(res,_mm_permute_ps(res,_MM_SHUFFLE(3,1,0,2)));
-    res = _mm_max_ps(res,_mm_permute_ps(res,_MM_SHUFFLE(3,1,0,2)));
-    res = _mm_fmadd_ps(_mm_set1_ps(-0.5f),_mm_permute_ps(midp,0b11111111),res);
-
-    return res[0];
-    }
-
-
-// Base class for both leaf & cell. Has all the basic definitions
-class Node
-    {  
-    public:
-        bool type;                                          // Type of node: Leaf == 1, Cell == 0
-        __m128 midp;
-        __m128 com;
-        Node* next;
-        
-        Node(float*, float);
-        Node(__m128);
-    };
-
-// Node constructor. Sets midpoint and side length
-Node::Node(float* mp, float s)
-    {
-    midp[0] = mp[0];
-    midp[1] = mp[1];
-    midp[2] = mp[2];
-    midp[3] = s;
-    }
-// Node constructor with float4 vector. Sets midpoint and side length
-Node::Node(__m128 mp)
-    {
-    midp = mp;
-    }
-
-// Leaf: Class for a node without children & a single body within it
-class Leaf: public Node
-    {
-    public:
-        int id;                                                              // Particle id
-        
-        Leaf(float*, float);
-        Leaf(__m128);
-    };
-    
-// Leaf constructor. Calls Node constructor & sets type
-Leaf::Leaf(float* mp, float s) 
-    : Node(mp, s)
-    {
-    type = 1;
-    }
-// Leaf constructor for SSE. Calls Node constructor & sets type
-Leaf::Leaf(__m128 mp) 
-    : Node(mp)
-    {
-    type = 1;
-    }
-
-// Cell: Class for a node with children & multiple bodies
-class Cell: public Node
-    {
-    public:
-        static __m128 octIdx[8];
-        int n;                                                              // Number of bodies inside cell
-        float delta;                                                        // Distance from midpoint to centre of mass
-        Node* subp[8];                                                      // Pointer to children
-        Node* more;                                                         // Pointer to first child
-        
-        Cell(float*, float);
-        Cell(__m128);
-        short whichOct(__m128);
-    };
-
-// Indexed vectors to easily calculate midpoint and sidelength of suboctants.
-// __m128 Cell::octIdx[8] = {{-1,-1,-1,-2},{1,-1,-1,-2},{-1,1,-1,-2},{1,1,-1,-2},{-1,-1,1,-2},{1,-1,1,-2},{-1,1,1,-2},{1,1,1,-2}};
-__m128 Cell::octIdx[8] = {{-0.25f,-0.25f,-0.25f,-0.5f},{0.25f,-0.25f,-0.25f,-0.5f},{-0.25f,0.25f,-0.25f,-0.5f},{0.25f,0.25f,-0.25f,-0.5f},{-0.25f,-0.25f,0.25f,-0.5f},{0.25f,-0.25f,0.25f,-0.5f},{-0.25f,0.25f,0.25f,-0.5f},{0.25f,0.25f,0.25f,-0.5f}};
-    
-// Cell constructor. Calls Node constructor & sets type
-Cell::Cell(float* mp, float s) 
-    : Node(mp, s)
-    {
-    type = 0;
-    }
-// Cell constructor. Calls Node constructor & sets type
-Cell::Cell(__m128 mp) 
-    : Node(mp)
-    {
-    type = 0;
-    }
-// Returns integer value of suboctant of position p
-short Cell::whichOct(__m128 p)
-    {
-    __m128 c = _mm_cmplt_ps(midp,p);
-    c = _mm_and_ps(_mm_setr_ps(1.0f,2.0f,4.0f,0.0f),c);
-
-    return (short)(c[0] + c[1] + c[2]);
-    }
-
-
-// Octree class
-class Octree
-    {
-    public:
-        Node* root;
-        std::vector<Leaf*> leaves;
-        std::vector<Cell*> cells;
-        std::vector<Node*> critCells;
-        int listCapacity;
-        int numCell;
-        int N;
-        int Ncrit;
-        float* pos;
-        float* vel;
-        float theta;
-        float eps;
-        double T;
-        int numThreads;
-
-        Octree(float*, float*, int, int, float, float);
-        ~Octree();
-        Cell* makeCell(Leaf*);
-        void makeRoot();
-        void insert(Cell*, __m128, int);
-        void insertMultiple();
-        void buildTree();
-        __m128 walkTree(Node*, Node*);
-        void getCrit();
-        void getBoxSize();
-        float energy();
-        float angularMomentum();
-        void integrate(float);
-        void integrateNSteps(float, int);
-        __m128 centreOfMomentum();
-        void updateColors(float*);
-        void updateLineColors(float*, float*, int);
-        void updateLineData(float*, int);
-        void saveCentreOfMass(float*);
-        void saveCentreOfMomentum(float*);
-    };
 // Constructor. Sets position, velocity, number of bodies, opening angle and softening length. Initializes Cell & Leaf vectors
 Octree::Octree(float* p, float* v, int n,  int ncrit, float th, float e)
     {
@@ -288,7 +87,7 @@ void Octree::insert(Cell* cell, __m128 p, int id)
                   
         Leaf* _leaf = leaves[id];                                       // Use existing leaf in list
         cell->subp[i] = (Node*)_leaf;                                   // Append ptr to leaf in list of subpointers
-                
+
         _leaf->com = p;                                                 // Set centre of mass of leaf
         _leaf->midp = _midp;                                            // Set midpoint of leaf
         _leaf->id = id;                                                 // Set particle id in leaf
@@ -350,24 +149,24 @@ __m128 Octree::walkTree(Node* p, Node* n)
         for(i = 0; i < 8; i++)
             {
             Node* _ptr = ptr->subp[i];
-            if(_ptr != NULL) desc[ndesc++] = _ptr;
+            if(_ptr != NULL) desc[ndesc++] = _ptr;                  // if subcell exists, append to list 'desc'
             }
 
-        ptr->more = desc[0];
+        ptr->more = desc[0];                                        // set 'more' pointer to first subcell
         desc[ndesc] = n;
-        for(i = 0; i < ndesc; i++)
+        for(i = 0; i < ndesc; i++)                                  // loop over all subcells
             {
-            __m128 _com = walkTree(desc[i], desc[i+1]);
+            __m128 _com = walkTree(desc[i], desc[i+1]);             // recursively call walkTree for all subcells
             __m128 _m = _mm_permute_ps(_com,0b11111111);
 
-            com = _mm_fmadd_ps(_com,_m,com);
-            M = _mm_add_ps(M,_m);
+            com = _mm_fmadd_ps(_com,_m,com);                        // add com of subcell
+            M = _mm_add_ps(M,_m);                                   // add up masses of subcells
             }
-        com = _mm_div_ps(com,M);
-        com = _mm_blend_ps(com,M,0b1000);
+        com = _mm_div_ps(com,M);                                    // scale com with total mass of cell
+        com = _mm_blend_ps(com,M,0b1000);                           // store total mass in com vector
 
-        ptr->com = com;
-        ptr->delta = dist(ptr->com,ptr->midp);
+        ptr->com = com;                                             // copy com to cell
+        ptr->delta = dist(ptr->com, ptr->midp);                     // calculate distance between com and midpoint
         }
 
     return p->com;
@@ -629,7 +428,7 @@ __m128 Octree::centreOfMomentum()
         mv = _mm_add_ps(mv,v);
         }
     mv = _mm_div_ps(mv, _mm_set1_ps(root->com[3]));
-    
+
     return mv;
     }
 // Takes array of colors as argument and updates them

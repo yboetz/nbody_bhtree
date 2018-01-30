@@ -6,6 +6,7 @@ Created on Fri Jan 19 21:40:41 2018
 """
 
 import os
+import sys
 import h5py
 from math import ceil
 from time import time
@@ -15,6 +16,7 @@ import pyqtgraph.opengl as gl
 from pyqtgraph.Qt import QtCore, QtGui
 from pandas import read_csv
 from utils import centreOfMomentum, centreOfMass
+sys.path.append(os.path.dirname(os.path.abspath(__file__)) + '/../cython')
 from octree import OTree as Octree
 
 
