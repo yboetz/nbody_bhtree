@@ -36,8 +36,7 @@ Then install the required python packages (best in your virtualenv)
 
 Compile the C++ code with
 
-	cd src
-    python setup.py build_ext --inplace
+	make build
 
 Finally start the widget
 
