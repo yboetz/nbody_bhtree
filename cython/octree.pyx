@@ -14,7 +14,7 @@ cdef extern from "../src/octree_mod.cpp":
         void updateLineData(float*, int)
         void saveCentreOfMass(float*)
         void saveCentreOfMomentum(float*)
-        double T
+        double T, T_insert, T_accel, T_walk
    
 
 cdef class OTree:
@@ -60,3 +60,12 @@ cdef class OTree:
     
     property T:
         def __get__(self): return self.thisptr.T
+
+    property T_accel:
+        def __get__(self): return self.thisptr.T_accel
+
+    property T_insert:
+        def __get__(self): return self.thisptr.T_insert
+
+    property T_walk:
+        def __get__(self): return self.thisptr.T_walk

@@ -23,6 +23,8 @@ class Octree
         double T;
         int numThreads;
 
+        double T_insert, T_accel, T_walk;
+
         Octree(float*, float*, int, int, float, float);
         ~Octree();
         Cell* makeCell(Leaf*);

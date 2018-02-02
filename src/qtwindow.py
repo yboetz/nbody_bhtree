@@ -40,6 +40,9 @@ class NBodyWidget(gl.GLViewWidget):
         # Set distance to origin
         self.opts['distance'] = 35
         self.isPanning = False
+        # Set initial time measurements
+        self.timings = np.array([0, 0, 0], dtype=np.float64)
+        self.num_steps = 0
 
         # Draw cube
         corners = [[-10, -10, -10], [-10, -10, 10], [-10, 10, 10], [-10, 10, -10], [10, -10, -10], [10, -10, 10], [10, 10, 10], [10, 10, -10]]
@@ -84,6 +87,12 @@ class NBodyWidget(gl.GLViewWidget):
         self.renderText(30, 45, "N:\t%i" %(self.n))
         self.renderText(30, 60, "Step:\t%.4f " %(self.dt))
         self.renderText(30, 75, "Time:\t%.3f" %(self.oct.T))
+        sum = np.sum(self.timings + 1E-15)
+        percent = 100 * self.timings / sum
+        self.renderText(30, 90, f'T/step:\t{sum:.6f}s')
+        self.renderText(30, 105, f"T_acc:\t {percent[0]:.2f}%")
+        self.renderText(30, 120, f"T_build:\t {percent[1]:.2f}%")
+        self.renderText(30, 135, f"T_walk:\t {percent[2]:.2f}%")
 
     # Pans around center at const rate of 2pi/min
     def cont_orbit(self):
@@ -93,6 +102,10 @@ class NBodyWidget(gl.GLViewWidget):
     # Integrates positions & velocities self.burst steps forward
     def updateData(self):
         self.oct.integrateNSteps(self.dt, self.burst)
+        self.num_steps += self.burst
+        timings = np.array([self.oct.T_accel, self.oct.T_insert,
+                            self.oct.T_walk], dtype=np.float64)
+        self.timings = timings / self.num_steps
 
     # Updates scatterplot
     def updateScatterPlot(self):
@@ -298,6 +311,8 @@ class NBodyWidget(gl.GLViewWidget):
             self.resetCenter()
             self.lineData = None
             self.dataPath = {'path': path, 'csv': csv}
+            self.timings = np.array([0, 0, 0, 0, 0], dtype=np.float64)
+            self.num_steps = 0
             if self.lp in self.items:
                 self.togglePlot()
             if self.isPanning:

@@ -6,15 +6,14 @@
 #include "accel.cpp"
 #include "utils.cpp"
 #include "node.cpp"
+#include <chrono>
+using namespace std::chrono;
 
 #pragma GCC diagnostic ignored "-Wignored-attributes"
 
 // Constructor. Sets position, velocity, number of bodies, opening angle and softening length. Initializes Cell & Leaf vectors
 Octree::Octree(float* p, float* v, int n,  int ncrit, float th, float e)
     {
-    numThreads = omp_get_num_procs();
-    numThreads = numThreads>1 ? numThreads-1 : numThreads;
-
     pos = p;
     vel = v;
     N = n;
@@ -24,6 +23,11 @@ Octree::Octree(float* p, float* v, int n,  int ncrit, float th, float e)
     eps = e;
     listCapacity = 0;
     T = 0;
+
+    // timing
+    T_accel = 0;
+    T_insert = 0;
+    T_walk = 0;
 
     leaves.resize(N);
     for(int i = 0; i < N; i++) leaves[i] = new Leaf(_mm_set1_ps(0.0f));
@@ -113,20 +117,25 @@ void Octree::insert(Cell* cell, __m128 p, int id)
 // Inserts all N bodies into root
 void Octree::insertMultiple()
     {
-    Cell* _root = (Cell*)root;
     for(int i = 0; i<N; i++)
         {
         __m128 p = _mm_load_ps(pos + 4*i);
-        insert(_root, p, i);
+        insert((Cell*)root, p, i);
         }
     }
 // Creates new root cell and fills it with bodies
 void Octree::buildTree()
     {
+    steady_clock::time_point t1_insert = steady_clock::now();
     makeRoot();
     insertMultiple();
+    steady_clock::time_point t2_insert = steady_clock::now();
+    steady_clock::time_point t1_walk = t2_insert;
     walkTree(root, root);
     getCrit();
+    steady_clock::time_point t2_walk = steady_clock::now();
+    T_insert += duration_cast<duration<double>>(t2_insert - t1_insert).count();
+    T_walk += duration_cast<duration<double>>(t2_walk - t1_walk).count();
     }
 /* Recursively walks tree and does three things:
     1. Threads tree for non-recursive tree walk (sets next & more pointers).
@@ -222,7 +231,7 @@ float Octree::energy()
     
     const int cSize = critCells.size();
     
-    #pragma omp parallel num_threads(numThreads)
+    #pragma omp parallel
     {
     std::vector<__m128> list (listCapacity);
     float _V = 0;
@@ -332,11 +341,13 @@ float Octree::angularMomentum()
 // Finds acceleration for every leaf and updates pos & vel via semi-implicit Euler integration. Rebuilds tree afterwards
 void Octree::integrate(float dt)
     {
+    steady_clock::time_point t1 = steady_clock::now();
+
     __m128 dtv = _mm_setr_ps(dt,dt,dt,0.0f);
     __m256 epsv = _mm256_set1_ps(eps);
     const int cSize = critCells.size();
     
-    #pragma omp parallel num_threads(numThreads)
+    #pragma omp parallel
     {
     std::vector<__m128> list (listCapacity);
     
@@ -405,6 +416,9 @@ void Octree::integrate(float dt)
     #pragma omp single
     listCapacity = list.capacity();
     }
+    steady_clock::time_point t2 = steady_clock::now();
+    T_accel += duration_cast<duration<double>>(t2 - t1).count();
+
     buildTree();
     T += dt;
     }
