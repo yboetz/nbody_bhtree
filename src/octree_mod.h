@@ -21,7 +21,6 @@ class Octree
         float theta;
         float eps;
         double T;
-        int numThreads;
 
         double T_insert, T_accel, T_walk;
 
