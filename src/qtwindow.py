@@ -90,9 +90,9 @@ class NBodyWidget(gl.GLViewWidget):
         sum = np.sum(self.timings + 1E-15)
         percent = 100 * self.timings / sum
         self.renderText(30, 90, f'T/step:\t{sum:.6f}s')
-        self.renderText(30, 105, f"T_acc:\t {percent[0]:.2f}%")
-        self.renderText(30, 120, f"T_build:\t {percent[1]:.2f}%")
-        self.renderText(30, 135, f"T_walk:\t {percent[2]:.2f}%")
+        self.renderText(30, 105, f"T_acc:\t {self.timings[0]:.6f}s, {percent[0]:.2f}%")
+        self.renderText(30, 120, f"T_build:\t {self.timings[1]:.6f}s, {percent[1]:.2f}%")
+        self.renderText(30, 135, f"T_walk:\t {self.timings[2]:.6f}s, {percent[2]:.2f}%")
 
     # Pans around center at const rate of 2pi/min
     def cont_orbit(self):
