@@ -1,5 +1,6 @@
 #include <vector>
 #include <x86intrin.h>
+#include "moments.h"
 #include "node.h"
 #ifndef OCTREE_MOD_H
 #define OCTREE_MOD_H
@@ -8,7 +9,7 @@
 class Octree
     {
     public:
-        Node* root;
+        Cell* root;
         std::vector<Leaf*> leaves;
         std::vector<Cell*> cells;
         std::vector<Node*> critCells;
@@ -26,12 +27,12 @@ class Octree
 
         Octree(float*, float*, int, int, float, float);
         ~Octree();
-        Cell* makeCell(Leaf*);
+        Cell* makeCell(__m128);
         void makeRoot();
         void insert(Cell*, __m128, int);
         void insertMultiple();
         void buildTree();
-        __m128 walkTree(Node*, Node*);
+        void walkTree(Node*, Node*);
         void getCrit();
         void getBoxSize();
         float energy();

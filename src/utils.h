@@ -2,8 +2,8 @@
 #ifndef UTILS_H
 #define UTILS_H
 
-// set _mm256 vector from two _m128 vectors
-#define _mm256_set_m128(va, vb) _mm256_permute2f128_ps(_mm256_castps128_ps256(va),_mm256_castps128_ps256(vb),0b00100000);
+#define _mm256_set_m128(/* __m128 */ hi, /* __m128 */ lo) _mm256_insertf128_ps(_mm256_castps128_ps256(lo), (hi), 0x1)
+#define _mm256_loadu2_m128(/* float const* */ hiaddr, /* float const* */ loaddr) _mm256_set_m128(_mm_loadu_ps(hiaddr), _mm_loadu_ps(loaddr))
 
 // Calculates cross product of vectors a & b. Last element is set to zero
 inline __m128 cross_ps(__m128 a, __m128 b);

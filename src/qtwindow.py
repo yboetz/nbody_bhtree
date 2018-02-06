@@ -90,9 +90,9 @@ class NBodyWidget(gl.GLViewWidget):
         sum = np.sum(self.timings + 1E-15)
         percent = 100 * self.timings / sum
         self.renderText(30, 90, f'T/step:\t{sum:.6f}s')
-        self.renderText(30, 105, f"T_acc:\t {self.timings[0]:.6f}s, {percent[0]:.2f}%")
-        self.renderText(30, 120, f"T_build:\t {self.timings[1]:.6f}s, {percent[1]:.2f}%")
-        self.renderText(30, 135, f"T_walk:\t {self.timings[2]:.6f}s, {percent[2]:.2f}%")
+        self.renderText(30, 105, f"T_acc:\t {percent[0]:.2f}%")
+        self.renderText(30, 120, f"T_build:\t {percent[1]:.2f}%")
+        self.renderText(30, 135, f"T_walk:\t {percent[2]:.2f}%")
 
     # Pans around center at const rate of 2pi/min
     def cont_orbit(self):
@@ -311,7 +311,7 @@ class NBodyWidget(gl.GLViewWidget):
             self.resetCenter()
             self.lineData = None
             self.dataPath = {'path': path, 'csv': csv}
-            self.timings = np.array([0, 0, 0, 0, 0], dtype=np.float64)
+            self.timings = np.array([0, 0, 0], dtype=np.float64)
             self.num_steps = 0
             if self.lp in self.items:
                 self.togglePlot()
@@ -621,9 +621,11 @@ class MainWindow(QtGui.QMainWindow):
         print("P = ({:.3f}, {:.3f}, {:.3f})".format(*com2))
 
     def keyPressE(self):
+        T = time()
         E = self.window.GLWidget.oct.energy()
+        T = time() - T
         J = self.window.GLWidget.oct.angularMomentum()
-        print("E = {:.4f}, J = {:.4f}".format(E, J))
+        print("E = {:.4f} ({:.3f}s), J = {:.4f}".format(E, T, J))
 
     def keyPressT(self):
         if self.window.GLWidget.timer.isActive():
