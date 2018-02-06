@@ -53,6 +53,7 @@ Basic controls:
 + O - opens a window to load another data file
 + F - fullscreen
 + G - show cube
++ B - show full octree
 + P - cont. pan aroung center
 + Esc - close widget
 
