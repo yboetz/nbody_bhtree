@@ -522,3 +522,9 @@ void Octree::saveCentreOfMomentum(float* com)
     {
     _mm_store_ps(com, centreOfMomentum());
     }
+// saves midpoints of all cells in list
+void Octree::save_midp(float* list)
+{
+    for(int i = 0; i < numCell; i++)
+        _mm_store_ps(list + 4*i, cells[i]->midp);
+}

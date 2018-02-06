@@ -45,6 +45,7 @@ class Octree
         void updateLineData(float*, int);
         void saveCentreOfMass(float*);
         void saveCentreOfMomentum(float*);
+        void save_midp(float*);
     };
 
 #endif

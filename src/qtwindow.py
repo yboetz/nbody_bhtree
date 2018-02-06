@@ -66,6 +66,8 @@ class NBodyWidget(gl.GLViewWidget):
         self.addItem(self.sp)
         # Create lineplot
         self.lp = gl.GLLinePlotItem()
+        # Create Octree plot
+        self.lp_oct = gl.GLLinePlotItem()
 
         # Timer which calls update function at const framerate
         self.timer = QtCore.QTimer()
@@ -79,6 +81,36 @@ class NBodyWidget(gl.GLViewWidget):
         # Initial read in of positions and velocity from file. Creates octree
         self.dataPath = {'path': 'plummer', 'csv': False}
         self.readFile(**self.dataPath)
+
+
+    # draw octree
+    def updateOctreePlot(self):
+        midp = self.oct.save_midp()
+        midp = midp.reshape((midp.size//4, 4))
+        vertices = np.array([[-1, -1, -1], [-1, -1, 1], [-1, 1, 1], [-1, 1, -1], [1, -1, -1], [1, -1, 1], [1, 1, 1], [1, 1, -1]]) / 2.0
+        vertices = (vertices[:,:,None] * midp[:,3]).transpose((2, 0, 1))
+        vertices = vertices + midp[:,None,:3]
+        vertices = vertices.reshape((midp.shape[0] * 8, 3))
+        v = []
+        for j in range(0, 8*midp.shape[0], 8):
+            for i in range(4):
+                v += [vertices[j+i], vertices[j+(i+1)%4], vertices[j+i+4], vertices[j+(i+1)%4+4], vertices[j+i], vertices[j+i+4]]
+        self.lp_oct.setData(pos=np.array(v),  antialias=True, mode='lines', width=0.5)
+
+    # Toggle GLLinePlotItem for Octree plot
+    def toggleOctreePlot(self):
+        if self.lp_oct in self.items:
+            self.timer.timeout.disconnect(self.updateOctreePlot)
+            self.removeItem(self.lp_oct)
+        else:
+            self.updateOctreePlot()
+            self.addItem(self.lp_oct)
+            self.timer.timeout.connect(self.updateOctreePlot)
+
+    # Updates lineplot
+    def updateLinePlot(self):
+        self.oct.updateLineData(self.lineData, self.lineLength)
+        self.lp.setData(pos=self.lineData, color=self.lineColors, antialias=True)
 
     # renderText has to be called inside paintGL
     def paintGL(self, *args, **kwds):
@@ -317,6 +349,8 @@ class NBodyWidget(gl.GLViewWidget):
                 self.togglePlot()
             if self.isPanning:
                 self.togglePan()
+            if self.lp_oct in self.items:
+                self.toggleOctreePlot()
 
     # Change number of bodies
     def changeNum(self, num):
@@ -602,7 +636,8 @@ class MainWindow(QtGui.QMainWindow):
                         QtCore.Qt.Key_R: self.window.GLWidget.toggleRecording,
                         QtCore.Qt.Key_T: self.keyPressT,
                         QtCore.Qt.Key_F: self.toggleFullScreen,
-                        QtCore.Qt.Key_P: self.window.GLWidget.togglePan
+                        QtCore.Qt.Key_P: self.window.GLWidget.togglePan,
+                        QtCore.Qt.Key_B: self.window.GLWidget.toggleOctreePlot
                         }
 
     # Show file dialog and calls file read function
