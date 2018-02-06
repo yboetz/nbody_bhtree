@@ -3,7 +3,7 @@
 This is an n-body simulation using a [Barnes-Hut](http://www.cita.utoronto.ca/~dubinski/treecode/treecode.html)
 tree algorithm. Number crunching code is written in C++, leveraging OpenMP and AVX instructions for
 high performance. This is then called in Python via Cython and visualized using pyqtgraph.
-On an Intel i7-6700K one million particles can be simulated at more than one timestep per second.
+On an Intel i7-6700K one million particles can be simulated at around one timestep per second.
 
 
 #### Requirements ####
