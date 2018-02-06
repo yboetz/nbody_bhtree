@@ -91,11 +91,11 @@ class NBodyWidget(gl.GLViewWidget):
         vertices = (vertices[:,:,None] * midp[:,3]).transpose((2, 0, 1))
         vertices = vertices + midp[:,None,:3]
         vertices = vertices.reshape((midp.shape[0] * 8, 3))
-        v = []
+        mask = lambda j: [j, j+1, j+4, j+5, j, j+4, j+1, j+2, j+5, j+6, j+1, j+5, j+2, j+3, j+6, j+7, j+2, j+6, j+3, j, j+7, j+4, j+3, j+7]
+        idx = []
         for j in range(0, 8*midp.shape[0], 8):
-            for i in range(4):
-                v += [vertices[j+i], vertices[j+(i+1)%4], vertices[j+i+4], vertices[j+(i+1)%4+4], vertices[j+i], vertices[j+i+4]]
-        self.lp_oct.setData(pos=np.array(v),  antialias=True, mode='lines', width=0.5)
+            idx += mask(j)
+        self.lp_oct.setData(pos=vertices.take(idx, axis=0),  antialias=True, mode='lines', width=0.5)
 
     # Toggle GLLinePlotItem for Octree plot
     def toggleOctreePlot(self):
