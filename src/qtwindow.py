@@ -30,7 +30,7 @@ class NBodyWidget(gl.GLViewWidget):
         # Softening length. CANNOT be zero or program will crash
         self.e = np.float32(.05)
         # Opening angle
-        self.theta = np.float32(1)
+        self.theta = np.float32(1.5)
         # Max number of bodies per critical cell
         self.Ncrit = 128
         # Tickrate. 1000/max framerate
@@ -87,14 +87,12 @@ class NBodyWidget(gl.GLViewWidget):
     def updateOctreePlot(self):
         midp = self.oct.save_midp()
         midp = midp.reshape((midp.size//4, 4))
-        vertices = np.array([[-1, -1, -1], [-1, -1, 1], [-1, 1, 1], [-1, 1, -1], [1, -1, -1], [1, -1, 1], [1, 1, 1], [1, 1, -1]]) / 2.0
-        vertices = (vertices[:,:,None] * midp[:,3]).transpose((2, 0, 1))
-        vertices = vertices + midp[:,None,:3]
-        vertices = vertices.reshape((midp.shape[0] * 8, 3))
-        mask = lambda j: [j, j+1, j+4, j+5, j, j+4, j+1, j+2, j+5, j+6, j+1, j+5, j+2, j+3, j+6, j+7, j+2, j+6, j+3, j, j+7, j+4, j+3, j+7]
-        idx = []
-        for j in range(0, 8*midp.shape[0], 8):
-            idx += mask(j)
+        vertices = np.array([[-1, -1, -1], [-1, -1, 1], [-1, 1, 1], [-1, 1, -1],
+                            [1, -1, -1], [1, -1, 1], [1, 1, 1], [1, 1, -1]], dtype=np.float32) / 2.0
+        vertices = (vertices[:,:,None] * midp[:,3]).transpose((2, 0, 1)) + midp[:,None,:3]
+        vertices = vertices.reshape((8*midp.shape[0], 3))
+        idx = 8*np.arange(0, midp.shape[0], dtype=int).repeat(24, axis=0)
+        idx += np.tile(np.array([0, 1, 4, 5, 0, 4, 1, 2, 5, 6, 1, 5, 2, 3, 6, 7, 2, 6, 3, 0, 7, 4, 3, 7], dtype=int), midp.shape[0])
         self.lp_oct.setData(pos=vertices.take(idx, axis=0),  antialias=True, mode='lines', width=0.5)
 
     # Toggle GLLinePlotItem for Octree plot
@@ -128,7 +126,7 @@ class NBodyWidget(gl.GLViewWidget):
 
     # Pans around center at const rate of 2pi/min
     def cont_orbit(self):
-        dp = 6 / self.fps
+        dp = 1 / self.fps
         self.orbit(dp,0)
 
     # Integrates positions & velocities self.burst steps forward
