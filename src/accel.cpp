@@ -4,7 +4,7 @@
 // Calculates acceleration on p1 by two points in p2
 inline __m128 accel(__m256 p1, __m256 p2, __m256 eps)
 {
-        // calculate normal vector and inverse distance
+    // calculate normal vector and inverse distance
     __m256 r = _mm256_sub_ps(p2, p1);                       // r = p2 - p1
     __m256 m = _mm256_permute_ps(p2, 0b11111111);           // m = mass of particles in p2
     __m256 invr = _mm256_blend_ps(r, eps, 0b10001000);      // softening length in 4th position of vector r
@@ -84,7 +84,7 @@ inline float pot(__m256 p1, __m256 p2, __m256 q1, __m256 q2, __m256 eps)
 {
     __m256 mask = _mm256_castsi256_ps(_mm256_cmpeq_epi64(_mm256_castps_si256(p1),
                                                          _mm256_castps_si256(p2)));
-    mask = _mm256_and_ps(mask, _mm256_permute_ps(mask,0b01001110)); // mask to check for equalness of p1 and p2
+    mask = _mm256_and_ps(mask, _mm256_permute_ps(mask, 0b01001110));    // mask to check for equalness of p1 and p2
 
     __m256 r = _mm256_sub_ps(p2, p1);                       // r = p2 - p1
     r = _mm256_blend_ps(r, eps, 0b10001000);                // softening length in 4th position of vector r

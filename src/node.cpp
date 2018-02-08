@@ -1,13 +1,13 @@
 #include <x86intrin.h>
 #include "node.h"
    
-// Leaf constructor. Calls Node constructor & sets type
+// Leaf constructor. Sets type & index
 Leaf::Leaf(int index)
     {
     type = 1;
     id = index;
     }
-// Cell constructor. Calls Node constructor & sets type
+// Cell constructor. Sets type & midpoint
 Cell::Cell(__m128 mp)
     {
     type = 0;

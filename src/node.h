@@ -17,7 +17,7 @@ class Node
 class Leaf: public Node
     {
     public:
-        int id;                     // Particle id
+        int id;                     // particle id
 
         Leaf(int);
     };
@@ -28,17 +28,17 @@ class Cell: public Node
     public:
         __m128 midp;                // midpoint (pos & sidelength) of node
         moment mom;                 // quadrupole tensor of node
+        int n;                      // number of bodies inside cell
+        float delta;                // distance from midpoint to centre of mass
+        Node* subp[8];              // pointer to children
+        Node* more;                 // pointer to first child
         static __m128 octIdx[8];
-        int n;                      // Number of bodies inside cell
-        float delta;                // Distance from midpoint to centre of mass
-        Node* subp[8];              // Pointer to children
-        Node* more;                 // Pointer to first child
 
         Cell(__m128);
         short whichOct(__m128);
     };
 
-// Indexed vectors to easily calculate midpoint and sidelength of suboctants.
+// indexed vectors to easily calculate midpoint and sidelength of suboctants.
 __m128 Cell::octIdx[8] = {{-0.25f,-0.25f,-0.25f,-0.5f},{0.25f,-0.25f,-0.25f,-0.5f},{-0.25f,0.25f,-0.25f,-0.5f},{0.25f,0.25f,-0.25f,-0.5f},{-0.25f,-0.25f,0.25f,-0.5f},{0.25f,-0.25f,0.25f,-0.5f},{-0.25f,0.25f,0.25f,-0.5f},{0.25f,0.25f,0.25f,-0.5f}};
 
 #endif

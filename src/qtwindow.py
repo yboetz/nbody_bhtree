@@ -118,9 +118,9 @@ class NBodyWidget(gl.GLViewWidget):
         self.renderText(30, 60, "N_cell:\t%i" %(self.oct.numCell))
         self.renderText(30, 75, "Step:\t%.4f " %(self.dt))
         self.renderText(30, 90, "Time:\t%.3f" %(self.oct.T))
-        sum = np.sum(self.timings + 1E-15)
-        percent = 100 * self.timings / sum
-        self.renderText(30, 105, f'T/step:\t{sum:.6f}s')
+        _sum = np.sum(self.timings + 1E-15)
+        percent = 100 * self.timings / _sum
+        self.renderText(30, 105, f'T/step:\t{_sum:.6f}s')
         self.renderText(30, 120, f"T_acc:\t {percent[0]:.2f}%")
         self.renderText(30, 135, f"T_build:\t {percent[1]:.2f}%")
         self.renderText(30, 150, f"T_walk:\t {percent[2]:.2f}%")

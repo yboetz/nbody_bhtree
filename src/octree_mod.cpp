@@ -33,10 +33,10 @@ Octree::Octree(float* p, float* v, int n,  int ncrit, float th, float e)
     T_accel = 0;
     T_insert = 0;
     T_walk = 0;
-
+    // create all leaves at beginning so they don't have to be created at every step
     leaves.resize(N);
     for(int i = 0; i < N; i++) leaves[i] = new Leaf(i);
-
+    // initialize root cell
     root = makeCell(_mm_set1_ps(0.0f));
 
     buildTree();
@@ -53,21 +53,22 @@ Cell* Octree::makeCell(__m128 midp)
     Cell* cell;
     if(numCell < (int)cells.size())
         {
-        cell = cells[numCell];
-        cell->midp = midp;
+        cell = cells[numCell];              // if there are enough cells in 'cells' vector, use one already created
+        cell->midp = midp;                  // set mitpoint of cell
         }
     else
         {
-        cell = new Cell (midp);
+        cell = new Cell (midp);             // if there are not yet enough cells, create a new one
         cells.push_back(cell);
         }
     // initialize com and quadrupole tensor
     cell->com = _mm_set1_ps(0.0f);
     moment_init(cell->mom);
+    // set all children to NULL
     for(int i = 0; i < 8; i++)
         cell->subp[i] = NULL;
-    cell->n = 0;
-    numCell++;
+    cell->n = 0;                            // no bodies in cell at beginning
+    numCell++;                              // total number of cells has increased by 1
     return cell;
     }
 // Prepares root for next iteration
@@ -84,46 +85,46 @@ void Octree::insert(Cell* cell, __m128 p, int id)
     short i = cell->whichOct(p);
     Node* sub = cell->subp[i];
 
-    if(sub == NULL)                                                     // If child does not exist, create leaf and insert body into leaf.
+    if(sub == NULL)                                                 // If child does not exist, create leaf and insert body into leaf.
         {
-        Leaf* leaf = leaves[id];                                        // Use existing leaf in list
-        cell->subp[i] = (Node*)leaf;                                    // Append leaf to list of subpointers
-        leaf->com = p;                                                  // com of leaf is position of body
+        Leaf* leaf = leaves[id];                                    // Use existing leaf in list
+        cell->subp[i] = (Node*)leaf;                                // Append leaf to list of subpointers
+        leaf->com = p;                                              // com of leaf is position of body
         }
-    else if(sub->type)                                                  // If child == leaf, create new cell in place of leaf and insert both bodies in cell
+    else if(sub->type)                                              // If child == leaf, create new cell in place of leaf and insert both bodies in cell
         {
-        __m128 midp = _mm_permute_ps(cell->midp, 0b11111111);           // Broadcast sidelength to all elements of midp
-        midp = _mm_fmadd_ps(Cell::octIdx[i], midp, cell->midp);         // Calculate midp of new cell with help of octIdx
+        __m128 midp = _mm_permute_ps(cell->midp, 0b11111111);       // Broadcast sidelength to all elements of midp
+        midp = _mm_fmadd_ps(Cell::octIdx[i], midp, cell->midp);     // Calculate midp of new cell with help of octIdx
         Cell* _cell = makeCell(midp);
         cell->subp[i] = (Node*)_cell;
         
-        short _i = _cell->whichOct(sub->com);                           // Calculates suboctant of original leaf in _cell
-        _cell->subp[_i] = sub;                                          // Append leaf to list of subpointers
-        (_cell->n)++;                                                   // Increase count of bodies in _cell by one
+        short _i = _cell->whichOct(sub->com);                       // Calculates suboctant of original leaf in _cell
+        _cell->subp[_i] = sub;                                      // Append leaf to list of subpointers
+        (_cell->n)++;                                               // Increase count of bodies in _cell by one
 
-        insert(_cell, p, id);                                           // Recursively insert leaf into new cell
+        insert(_cell, p, id);                                       // Recursively insert leaf into new cell
         }
-    else insert((Cell*)sub, p, id);                                     // If child == cell, recursively insert body into child
+    else insert((Cell*)sub, p, id);                                 // If child == cell, recursively insert body into child
     }
 // Inserts all N bodies into root
 void Octree::insertMultiple()
     {
     for(int i = 0; i<N; i++)
         {
-        __m128 p = _mm_load_ps(pos + 4*i);
-        insert(root, p, i);
+        __m128 p = _mm_load_ps(pos + 4*i);                          // load next body
+        insert(root, p, i);                                         // insert into root
         }
     }
 // Creates new root cell and fills it with bodies
 void Octree::buildTree()
     {
     steady_clock::time_point t1_insert = steady_clock::now();
-    makeRoot();
-    insertMultiple();
+    makeRoot();                                                     // prepare root for new tree
+    insertMultiple();                                               // insert all bodies into the root node
     steady_clock::time_point t2_insert = steady_clock::now();
     steady_clock::time_point t1_walk = t2_insert;
-    walkTree(root, root);
-    getCrit();
+    walkTree(root, root);                                           // recursively walk tree
+    getCrit();                                                      // store all critical cells (n < Ncrit) into list
     steady_clock::time_point t2_walk = steady_clock::now();
     T_insert += duration_cast<duration<double>>(t2_insert - t1_insert).count();
     T_walk += duration_cast<duration<double>>(t2_walk - t1_walk).count();
@@ -154,12 +155,12 @@ void Octree::walkTree(Node* p, Node* n)
             {
             walkTree(desc[i], desc[i+1]);                           // recursively call walkTree for all subcells
             // calculate com
-            __m128 m = _mm_permute_ps(desc[i]->com, 0b11111111);
-            p->com = _mm_fmadd_ps(desc[i]->com, m, p->com);
-            M = _mm_add_ps(M, m);
+            __m128 m = _mm_permute_ps(desc[i]->com, 0b11111111);    // m = mass of child node
+            p->com = _mm_fmadd_ps(desc[i]->com, m, p->com);         // add center of mass of child node
+            M = _mm_add_ps(M, m);                                   // sum up total mass in children
             }
-        p->com = _mm_div_ps(p->com, M);
-        p->com = _mm_blend_ps(p->com, M, 0b1000);
+        p->com = _mm_div_ps(p->com, M);                             // divide calculated center of mass by total mass
+        p->com = _mm_blend_ps(p->com, M, 0b1000);                   // store total mass in com vector
         ((Cell*)p)->delta = dist(p->com, ((Cell*)p)->midp);         // calculate distance between com and midpoint
         // compute quadrupole tensor
         for(int i = 0; i < ndesc; i++)
@@ -169,24 +170,24 @@ void Octree::walkTree(Node* p, Node* n)
 // Finds cells with less than Ncrit bodies and appends them to global list critCells
 void Octree::getCrit()
     {
-    critCells.resize(0);
-    Node* node = root;
+    critCells.resize(0);                                            // initialize critCells list
+    Node* node = root;                                              // start at root
     do
         {       
-        if(node->type == 0) 
+        if(node->type == 0)                                         // if type == cell
             {
-            if((((Cell*)node)->n) > Ncrit)
-                node = ((Cell*)node)->more;
+            if((((Cell*)node)->n) > Ncrit)                          // if number of bodies > Ncrit
+                node = ((Cell*)node)->more;                         // go one level deeper
             else 
                 {
-                critCells.push_back(node);
-                node = node->next;
+                critCells.push_back(node);                          // if not, add cell to list of critCells
+                node = node->next;                                  // continue on same or higher level
                 } 
             }
         else 
             {
-            critCells.push_back(node);
-            node = node->next;
+            critCells.push_back(node);                              // if type == leaf, we cannot go deeper
+            node = node->next;                                      // so add leaf to list of critCells
             }
         }
     while(node != root);
@@ -197,37 +198,36 @@ void Octree::getBoxSize()
     __m128 side = _mm_set1_ps(0.0f);
     __m128 cent = root->midp;
     
-    for(int i = 0; i < N; i++)
+    for(int i = 0; i < N; i++)                                      // iterate over all bodies
         {   
-        __m128 p = _mm_sub_ps(_mm_load_ps(pos + 4*i), cent);
-        p = _mm_and_ps(_mm_castsi128_ps(_mm_set1_epi32(0x7fffffff)),p); // Absolute value
-        side = _mm_max_ps(side,p);      
+        __m128 p = _mm_sub_ps(_mm_load_ps(pos + 4*i), cent);        // distance to center
+        p = _mm_and_ps(_mm_castsi128_ps(_mm_set1_epi32(0x7fffffff)),p); // absolute value
+        side = _mm_max_ps(side,p);                                  // find maximal value
         }
-
+    // find maximal value over first 3 entries
     side = _mm_max_ps(side, _mm_permute_ps(side,_MM_SHUFFLE(3,1,0,2)));
     side = _mm_max_ps(side, _mm_permute_ps(side,_MM_SHUFFLE(3,1,0,2)));
 
-    root->midp[3] = 2.0f*side[0];
+    root->midp[3] = 2.0f*side[0];                                   // sidelength of root node is 2x max. norm of farthest particle
     }
 // Calculates energy of system (approximate)
 float Octree::energy()
     {
     const __m128 ZERO = _mm_set1_ps(0.0f);
     __m256 epsv = _mm256_set1_ps(eps);
-    float V = 0;
-    float T = 0;
-    
-    const int cSize = critCells.size();
+    float V = 0;                                                    // total potential energy
+    float T = 0;                                                    // total kinetic energy
     
     #pragma omp parallel
     {
+    // in parallel region initialice temporary interaction lists and energy variables for each thread
     std::vector<float> int_cells (listCapacity);
     std::vector<float> int_leaves (4*Ncrit);
     float _V = 0.0f;
     float _T = 0.0f;
-    
+
     #pragma omp for schedule(dynamic)
-    for(int i = 0; i < cSize; i++)
+    for(int i = 0; i < (int)critCells.size(); i++)                  // loop over all critical cells
         {
         int_cells.resize(0);
         int_leaves.resize(0);
@@ -237,19 +237,19 @@ float Octree::energy()
         do
         {
             Cell* _node = (Cell*)node;
-            const float* begin_com = (float*)&(node->com);              // pointer to first element of center of mass
-            const float* begin_mom = (float*)&(((Cell*)node)->mom);     // only defined if type of node == cell
+            const float* begin_com = (float*)&(node->com);          // pointer to first element of center of mass
+            const float* begin_mom = (float*)&(((Cell*)node)->mom); // only defined if type of node == cell
             if(node->type)
             {
-                int_leaves.insert(int_leaves.end(), begin_com, begin_com + SIZEOF_COM);     // append center of mass vector
+                int_leaves.insert(int_leaves.end(), begin_com, begin_com + SIZEOF_COM); // append center of mass vector
                 node = node->next;
             }
             // if critCell == leaf we have to calculate cdist using com instead of midp
             else if((critCell->type == 0 && ((_node->midp[3])/theta + _node->delta) < cdist(critCell->midp, _node->com)) ||
                     (critCell->type == 1 && ((_node->midp[3])/theta + _node->delta) < cdist(_mm_blend_ps(critCell->com, ZERO, 0b1000), _node->com)))
             {
-                int_cells.insert(int_cells.end(), begin_com, begin_com + SIZEOF_COM);      // append center of mass vector
-                int_cells.insert(int_cells.end(), begin_mom, begin_mom + SIZEOF_MOM);      // append moment tensor struct
+                int_cells.insert(int_cells.end(), begin_com, begin_com + SIZEOF_COM);   // append center of mass vector
+                int_cells.insert(int_cells.end(), begin_mom, begin_mom + SIZEOF_MOM);   // append moment tensor struct
                 node = node->next;
             }
             else node = _node->more;   
@@ -269,12 +269,12 @@ float Octree::energy()
             {
             if(node->type)
                 {
-                float* cells_ptr = int_cells.data();    // pointer to first element in interaction list (better performance)
+                float* cells_ptr = int_cells.data();                // pointer to first element in interaction list (better performance)
                 int idx = 4*(((Leaf*)node)->id);
                 __m128 p = _mm_load_ps(pos + idx);
                 __m128 v = _mm_load_ps(vel + idx);
                 __m256 _p1 = _mm256_set_m128(p, p);
-                float V_tmp = 0.0f;                     // is needed else result is not accurate?
+                float V_tmp = 0.0f;                                 // is needed else result is not accurate?
 
                 for(int j = 0; j < (int)int_leaves.size(); j+=2*SIZEOF_COM)
                 {
@@ -283,14 +283,14 @@ float Octree::energy()
                 }
                 for(int j = 0; j < (int)int_cells.size(); j+=2*SIZEOF_TOT)
                 {
-                    __m256 _p2 = _mm256_loadu2_m128(cells_ptr, cells_ptr+SIZEOF_TOT);       // read in com of 2 particles
+                    __m256 _p2 = _mm256_loadu2_m128(cells_ptr, cells_ptr+SIZEOF_TOT);   // read in com of 2 particles
                     __m256 _q1 = _mm256_loadu2_m128(cells_ptr+SIZEOF_COM, cells_ptr+SIZEOF_TOT+SIZEOF_COM);     // read in quad. tensor
                     __m256 _q2 = _mm256_loadu2_m128(cells_ptr+SIZEOF_COM+2, cells_ptr+SIZEOF_TOT+SIZEOF_COM+2); // read in quad. tensor
-                    V_tmp += pot(_p1, _p2, _q1, _q2, epsv);                 // calculate potential
-                    cells_ptr += 2*SIZEOF_TOT;                              // increment pointer by 2
+                    V_tmp += pot(_p1, _p2, _q1, _q2, epsv);         // calculate potential
+                    cells_ptr += 2*SIZEOF_TOT;                      // increment pointer by 2
                 }
                 _V += V_tmp;
-
+                // calculate kinetic energy
                 v = _mm_dp_ps(v, v, 0b01111111);
                 _T += p[3] * v[0];
 
@@ -302,14 +302,14 @@ float Octree::energy()
         }
     #pragma omp atomic
     V += _V;
-    
+
     #pragma omp atomic
     T += _T;
-    
+
     #pragma omp single
     listCapacity = int_cells.capacity();
     }
-
+    // subtract kinetic energy of center of mass
     __m128 mv = centreOfMomentum();
     mv = _mm_dp_ps(mv, mv, 0b01111111);
     T -= (root->com[3]) * mv[0];
@@ -335,8 +335,8 @@ float Octree::angularMomentum()
         mv = _mm_add_ps(mv,v);
         }
 
-    J = _mm_sub_ps(J,cross_ps(root->com, mv));
-    J = _mm_dp_ps(J,J,0b01111111);
+    J = _mm_sub_ps(J, cross_ps(root->com, mv));
+    J = _mm_dp_ps(J, J, 0b01111111);
     J = _mm_sqrt_ps(J);
 
     return J[0];
@@ -346,16 +346,17 @@ void Octree::integrate(float dt)
     {
     steady_clock::time_point t1 = steady_clock::now();
 
-    __m128 dtv = _mm_setr_ps(dt,dt,dt,0.0f);
+    __m128 dtv = _mm_setr_ps(dt, dt, dt, 0.0f);
     __m256 epsv = _mm256_set1_ps(eps);
     
     #pragma omp parallel
     {
+    // in parallel region initialice temporary interaction lists for each thread
     std::vector<float> int_cells (listCapacity);
     std::vector<float> int_leaves (4*Ncrit);
     
     #pragma omp for schedule(dynamic)
-    for(int i = 0; i < (int)critCells.size(); i++)
+    for(int i = 0; i < (int)critCells.size(); i++)                  // loop over all critical cells
         {
         int_cells.resize(0);
         int_leaves.resize(0);
@@ -365,19 +366,19 @@ void Octree::integrate(float dt)
         do
         {
             Cell* _node = (Cell*)node;
-            const float* begin_com = (float*)&(node->com);              // pointer to first element of center of mass
-            const float* begin_mom = (float*)&(((Cell*)node)->mom);     // only defined if type of node == cell
+            const float* begin_com = (float*)&(node->com);          // pointer to first element of center of mass
+            const float* begin_mom = (float*)&(((Cell*)node)->mom); // only defined if type of node == cell
             if(node->type)
             {
-                int_leaves.insert(int_leaves.end(), begin_com, begin_com + SIZEOF_COM);     // append center of mass vector
+                int_leaves.insert(int_leaves.end(), begin_com, begin_com + SIZEOF_COM); // append center of mass vector
                 node = node->next;
             }
             // if critCell == leaf we have to calculate cdist using com instead of midp
             else if((critCell->type == 0 && ((_node->midp[3])/theta + _node->delta) < cdist(critCell->midp, _node->com)) ||
                     (critCell->type == 1 && ((_node->midp[3])/theta + _node->delta) < cdist(_mm_blend_ps(critCell->com, dtv, 0b1000), _node->com)))
             {
-                int_cells.insert(int_cells.end(), begin_com, begin_com + SIZEOF_COM);      // append center of mass vector
-                int_cells.insert(int_cells.end(), begin_mom, begin_mom + SIZEOF_MOM);      // append moment tensor struct
+                int_cells.insert(int_cells.end(), begin_com, begin_com + SIZEOF_COM);   // append center of mass vector
+                int_cells.insert(int_cells.end(), begin_mom, begin_mom + SIZEOF_MOM);   // append moment tensor struct
                 node = node->next;
             }
             else node = _node->more;   
@@ -397,7 +398,7 @@ void Octree::integrate(float dt)
             {
             if(node->type)
                 {
-                float* cells_ptr = int_cells.data();    // pointer to first element in interaction list (better performance)
+                float* cells_ptr = int_cells.data();                // pointer to first element in interaction list (better performance)
                 int idx = 4*(((Leaf*)node)->id);
                 __m128 p = _mm_load_ps(pos + idx);
                 __m128 v = _mm_load_ps(vel + idx);
@@ -411,16 +412,16 @@ void Octree::integrate(float dt)
                 }
                 for(int j = 0; j < (int)int_cells.size(); j+=2*SIZEOF_TOT)
                 {
-                    __m256 _p2 = _mm256_loadu2_m128(cells_ptr, cells_ptr+SIZEOF_TOT);       // read in com of 2 particles
+                    __m256 _p2 = _mm256_loadu2_m128(cells_ptr, cells_ptr+SIZEOF_TOT);   // read in com of 2 particles
                     __m256 _q1 = _mm256_loadu2_m128(cells_ptr+SIZEOF_COM, cells_ptr+SIZEOF_TOT+SIZEOF_COM);     // read in quad. tensor
                     __m256 _q2 = _mm256_loadu2_m128(cells_ptr+SIZEOF_COM+2, cells_ptr+SIZEOF_TOT+SIZEOF_COM+2); // read in quad. tensor
-                    a = _mm_add_ps(a, accel(_p1, _p2, _q1, _q2, epsv));                     // calculate acceleration
-                    cells_ptr += 2*SIZEOF_TOT;                                              // increment pointer by 2
+                    a = _mm_add_ps(a, accel(_p1, _p2, _q1, _q2, epsv));     // calculate acceleration
+                    cells_ptr += 2*SIZEOF_TOT;                              // increment pointer by 2
                 }
-
+                // semi-implicit Euler integration
                 v = _mm_fmadd_ps(dtv, a, v);
                 p = _mm_fmadd_ps(dtv, v, p);
-
+                // store new position & velocity
                 _mm_store_ps(pos + idx, p);
                 _mm_store_ps(vel + idx, v);
 
@@ -435,7 +436,7 @@ void Octree::integrate(float dt)
     }
     steady_clock::time_point t2 = steady_clock::now();
     T_accel += duration_cast<duration<double>>(t2 - t1).count();
-
+    // rebuild tree
     buildTree();
     T += dt;
     }

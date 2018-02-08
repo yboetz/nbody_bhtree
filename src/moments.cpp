@@ -12,12 +12,12 @@ inline void moment_init(moment &mom)
     mom.zz = 0.0f;
 }
 
-// add quad moment from subcell to cell
+// add quad. moment from subcell to cell
 inline void moment_add_sub(Cell* cell, Node* sub)
 {
-    __m128 pos = _mm_sub_ps(sub->com, cell->com);       // relative distance of subcell to com
-
-    if(sub->type == 0) // if type == cell add quadrupole moment of subcell
+    __m128 pos = _mm_sub_ps(sub->com, cell->com);           // relative distance of subcell to com
+    // if type == cell add quadrupole moment of subcell
+    if(sub->type == 0)
     {
         (cell->mom).xx += (((Cell*)sub)->mom).xx;
         (cell->mom).xy += (((Cell*)sub)->mom).xy;

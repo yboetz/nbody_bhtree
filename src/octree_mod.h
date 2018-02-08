@@ -9,21 +9,21 @@
 class Octree
     {
     public:
-        Cell* root;
-        std::vector<Leaf*> leaves;
-        std::vector<Cell*> cells;
-        std::vector<Node*> critCells;
-        int listCapacity;
-        int numCell;
-        int N;
-        int Ncrit;
-        float* pos;
-        float* vel;
-        float theta;
-        float eps;
-        double T;
+        Cell* root;                                         // root cell
+        std::vector<Leaf*> leaves;                          // list of all leaves
+        std::vector<Cell*> cells;                           // list of all cells
+        std::vector<Node*> critCells;                       // list of all critical cells
+        int listCapacity;                                   // size of temporary interaction lists
+        int numCell;                                        // total number of cells
+        int N;                                              // total number of bodies
+        int Ncrit;                                          // max. number of bodies per critical cell
+        float* pos;                                         // pointer to array containing positions (x, y, z, m)
+        float* vel;                                         // pointer to array containing velocities (vx, vy, vz, 0)
+        float theta;                                        // opening angle
+        float eps;                                          // softening length
+        double T;                                           // time passed in system (not physical units)
 
-        double T_insert, T_accel, T_walk;
+        double T_insert, T_accel, T_walk;                   // variables for time measurements
 
         Octree(float*, float*, int, int, float, float);
         ~Octree();
