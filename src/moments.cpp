@@ -1,7 +1,7 @@
 #include <x86intrin.h>
 #include "moments.h"
 
-// initialize moment with com vector, set quad to zero
+// initialize moment to zero
 inline void moment_init(moment &mom)
 {
     mom.xx = 0.0f;
@@ -15,9 +15,7 @@ inline void moment_init(moment &mom)
 // add quad moment from subcell to cell
 inline void moment_add_sub(Cell* cell, Node* sub)
 {
-    // __m128 _m = _mm_permute_ps(sub->com, 0b11111111);
     __m128 pos = _mm_sub_ps(sub->com, cell->com);       // relative distance of subcell to com
-    // pos = _mm_blend_ps(pos, _m, 0b1000);                // blend mass of subcell in relative distance
 
     if(sub->type == 0) // if type == cell add quadrupole moment of subcell
     {

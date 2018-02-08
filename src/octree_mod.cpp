@@ -87,21 +87,21 @@ void Octree::insert(Cell* cell, __m128 p, int id)
     if(sub == NULL)                                                     // If child does not exist, create leaf and insert body into leaf.
         {
         Leaf* leaf = leaves[id];                                        // Use existing leaf in list
-        cell->subp[i] = (Node*)leaf;                                    // Append node to leaf in list of subpointers
-        leaf->com = p;                                                  // com of leaf is position of body, set quadrupole tensor to zero
+        cell->subp[i] = (Node*)leaf;                                    // Append leaf to list of subpointers
+        leaf->com = p;                                                  // com of leaf is position of body
         }
     else if(sub->type)                                                  // If child == leaf, create new cell in place of leaf and insert both bodies in cell
         {
         __m128 midp = _mm_permute_ps(cell->midp, 0b11111111);           // Broadcast sidelength to all elements of midp
-        midp = _mm_fmadd_ps(Cell::octIdx[i], midp, cell->midp);         // Calculate midp of leaf with help of octIdx
+        midp = _mm_fmadd_ps(Cell::octIdx[i], midp, cell->midp);         // Calculate midp of new cell with help of octIdx
         Cell* _cell = makeCell(midp);
         cell->subp[i] = (Node*)_cell;
         
         short _i = _cell->whichOct(sub->com);                           // Calculates suboctant of original leaf in _cell
-        _cell->subp[_i] = sub;
-        (_cell->n)++;
+        _cell->subp[_i] = sub;                                          // Append leaf to list of subpointers
+        (_cell->n)++;                                                   // Increase count of bodies in _cell by one
 
-        insert(_cell, p, id);
+        insert(_cell, p, id);                                           // Recursively insert leaf into new cell
         }
     else insert((Cell*)sub, p, id);                                     // If child == cell, recursively insert body into child
     }
@@ -111,7 +111,7 @@ void Octree::insertMultiple()
     for(int i = 0; i<N; i++)
         {
         __m128 p = _mm_load_ps(pos + 4*i);
-        insert((Cell*)root, p, i);
+        insert(root, p, i);
         }
     }
 // Creates new root cell and fills it with bodies
