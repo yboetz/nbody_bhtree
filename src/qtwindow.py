@@ -115,14 +115,15 @@ class NBodyWidget(gl.GLViewWidget):
         super().paintGL(*args, **kwds)
         self.renderText(30, 30, "Fps:\t%.2f" %(self.fps))
         self.renderText(30, 45, "N:\t%i" %(self.n))
-        self.renderText(30, 60, "Step:\t%.4f " %(self.dt))
-        self.renderText(30, 75, "Time:\t%.3f" %(self.oct.T))
+        self.renderText(30, 60, "N_cell:\t%i" %(self.oct.numCell))
+        self.renderText(30, 75, "Step:\t%.4f " %(self.dt))
+        self.renderText(30, 90, "Time:\t%.3f" %(self.oct.T))
         sum = np.sum(self.timings + 1E-15)
         percent = 100 * self.timings / sum
-        self.renderText(30, 90, f'T/step:\t{sum:.6f}s')
-        self.renderText(30, 105, f"T_acc:\t {percent[0]:.2f}%")
-        self.renderText(30, 120, f"T_build:\t {percent[1]:.2f}%")
-        self.renderText(30, 135, f"T_walk:\t {percent[2]:.2f}%")
+        self.renderText(30, 105, f'T/step:\t{sum:.6f}s')
+        self.renderText(30, 120, f"T_acc:\t {percent[0]:.2f}%")
+        self.renderText(30, 135, f"T_build:\t {percent[1]:.2f}%")
+        self.renderText(30, 150, f"T_walk:\t {percent[2]:.2f}%")
 
     # Pans around center at const rate of 2pi/min
     def cont_orbit(self):

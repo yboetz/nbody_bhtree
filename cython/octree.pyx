@@ -77,3 +77,6 @@ cdef class OTree:
 
     property T_walk:
         def __get__(self): return self.thisptr.T_walk
+
+    property numCell:
+        def __get__(self): return self.thisptr.numCell
