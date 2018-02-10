@@ -307,7 +307,7 @@ class NBodyWidget(gl.GLViewWidget):
             if n >= 20:
                 mask = np.concatenate((np.arange(0, 20), np.linspace(20, len(m), n - 20, endpoint=False, dtype=int)))
             else:
-                mask = np.arange(0, n)
+                mask = np.arange(0, n, dtype=int)
         else:
             mask = np.linspace(0, len(m), n, endpoint=False, dtype=int)
             m = m * len(m) / n # rescale masses for lower number of bodies

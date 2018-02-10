@@ -61,12 +61,9 @@ Cell* Octree::makeCell(__m128 midp)
         cell = new Cell (midp);             // if there are not yet enough cells, create a new one
         cells.push_back(cell);
         }
-    // initialize com and quadrupole tensor
-    cell->com = _mm_set1_ps(0.0f);
-    moment_init(cell->mom);
-    // set all children to NULL
+    moment_init(cell);                      // initialize com and quadrupole tensor
     for(int i = 0; i < 8; i++)
-        cell->subp[i] = NULL;
+        cell->subp[i] = NULL;               // set all children to NULL
     cell->n = 0;                            // no bodies in cell at beginning
     numCell++;                              // total number of cells has increased by 1
     return cell;
