@@ -218,13 +218,11 @@ float Octree::energy()
     float V = 0;                                                    // total potential energy
     float T = 0;                                                    // total kinetic energy
     
-    #pragma omp parallel
+    #pragma omp parallel reduction(+: T, V)
     {
     // in parallel region initialice temporary interaction lists and energy variables for each thread
     std::vector<float> int_cells (listCapacity);
     std::vector<float> int_leaves (4*Ncrit);
-    float _V = 0.0f;
-    float _T = 0.0f;
 
     #pragma omp for schedule(dynamic)
     for(int i = 0; i < (int)critCells.size(); i++)                  // loop over all critical cells
@@ -274,25 +272,25 @@ float Octree::energy()
                 __m128 p = _mm_load_ps(pos + idx);
                 __m128 v = _mm_load_ps(vel + idx);
                 __m256 _p1 = _mm256_set_m128(p, p);
-                float V_tmp = 0.0f;                                 // is needed else result is not accurate?
+                float _V = 0.0f;                                    // is needed to cancel out floating point errors
 
                 for(int j = 0; j < (int)int_leaves.size(); j+=2*SIZEOF_COM)
                 {
                     __m256 _p2 = _mm256_loadu_ps(int_leaves.data() + j);    // read in com of 2 particles
-                    V_tmp += pot(_p1, _p2, epsv);                           // calculate potential
+                    _V += pot(_p1, _p2, epsv);                           // calculate potential
                 }
                 for(int j = 0; j < (int)int_cells.size(); j+=2*SIZEOF_TOT)
                 {
                     __m256 _p2 = _mm256_loadu2_m128(cells_ptr, cells_ptr+SIZEOF_TOT);   // read in com of 2 particles
                     __m256 _q1 = _mm256_loadu2_m128(cells_ptr+SIZEOF_COM, cells_ptr+SIZEOF_TOT+SIZEOF_COM);     // read in quad. tensor
                     __m256 _q2 = _mm256_loadu2_m128(cells_ptr+SIZEOF_COM+2, cells_ptr+SIZEOF_TOT+SIZEOF_COM+2); // read in quad. tensor
-                    V_tmp += pot(_p1, _p2, _q1, _q2, epsv);         // calculate potential
+                    _V += pot(_p1, _p2, _q1, _q2, epsv);         // calculate potential
                     cells_ptr += 2*SIZEOF_TOT;                      // increment pointer by 2
                 }
-                _V += V_tmp;
+                V += _V;
                 // calculate kinetic energy
                 v = _mm_dp_ps(v, v, 0b01111111);
-                _T += p[3] * v[0];
+                T += p[3] * v[0];
 
                 node = node->next;
                 }
@@ -300,12 +298,6 @@ float Octree::energy()
             }
         while(node != end);
         }
-    #pragma omp atomic
-    V += _V;
-
-    #pragma omp atomic
-    T += _T;
-
     #pragma omp single
     listCapacity = int_cells.capacity();
     }
