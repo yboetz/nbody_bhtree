@@ -28,14 +28,14 @@ inline void moment_add_sub(Cell* cell, Node* sub)
         (cell->mom).zz += (((Cell*)sub)->mom).zz;
     }
     // use parallel-axis theorem to get final quadrupole moment
-    float x, y, z, m, xx, yy, d2, tx, ty;
+    float x, y, z, m, d2, tx, ty;
     x = pos[0];
     y = pos[1];
     z = pos[2];
     m = sub->com[3];
-    xx = x*x;
-    yy = y*y;
-    d2 = xx + yy + z*z;
+    d2 = x*x;
+    d2 += y*y;
+    d2 += z*z;
     tx = m*x;
     ty = m*y;
 

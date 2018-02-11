@@ -17,7 +17,7 @@ inline __m128 accel(__m256 p1, __m256 p2, __m256 eps)
     __m256 a = _mm256_mul_ps(m, invr);                      // a = m / r^2
     a = _mm256_mul_ps(a, r);                                // a = m / r^2 * n
 
-    a = _mm256_add_ps(a,_mm256_permute2f128_ps(a,a,1));     // add higher 128bits to lower 128bits
+    a = _mm256_add_ps(a, _mm256_permute2f128_ps(a, a, 1));  // add higher 128bits to lower 128bits
     return _mm256_castps256_ps128(a);
 }
 
