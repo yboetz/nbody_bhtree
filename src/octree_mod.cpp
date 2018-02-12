@@ -335,6 +335,11 @@ float Octree::angularMomentum()
 void Octree::integrate(float dt)
     {
     steady_clock::time_point t1 = steady_clock::now();
+    // define pointers to be accessed in openacc
+    float* p = pos;
+    float* v = vel;
+    // send everything to GPU to calculate interactions
+    #pragma acc enter data present_or_copyin(p[0:4*N], v[0:4*N])
 
     // in parallel region initialice temporary interaction lists for each thread
     std::vector<float> idx (N/Ncrit);
@@ -393,15 +398,12 @@ void Octree::integrate(float dt)
         float* id_ptr = idx.data();
         float* int_l = int_leaves.data();
         float* int_c = int_cells.data();
-        float* p = pos;
-        float* v = vel;
         int idsize = idx.size();
         int lsize = int_leaves.size();
         int csize = int_cells.size();
-        // send everything to GPU to calculate interactions
-        #pragma acc enter data present_or_copyin(p[0:4*N], v[0:4*N]), \
-        copyin(int_l[0:lsize], int_c[0:csize], id_ptr[0:idsize])
-        #pragma acc parallel num_gangs(16), num_workers(16), vector_length(32) //, async(i)
+
+        #pragma acc data copyin(int_l[0:lsize], int_c[0:csize], id_ptr[0:idsize])
+        #pragma acc parallel num_gangs(16), num_workers(32), vector_length(32) //, async(i)
         #pragma acc loop gang
         for(int j = 0; j < idsize; j++)
         {
@@ -446,18 +448,18 @@ void Octree::integrate(float dt)
                 float zz = int_c[k+SIZEOF_COM+5];
                 float invr = x*x + y*y + z*z + EPS*EPS;     // invr = r^2
                 invr = 1/sqrtf(invr);                       // invr = 1/r
-                float invr2 = invr*invr;                    // invr2 = 1/r^2
                 x *= invr;
                 y *= invr;
                 z *= invr;
+                invr = invr*invr;                           // invr = 1/r^2
 
                 // monopole
-                ax += m*x*invr2;
-                ay += m*y*invr2;
-                az += m*z*invr2;
+                ax += m*x*invr;
+                ay += m*y*invr;
+                az += m*z*invr;
 
                 // quadrupole
-                invr = 3.0*invr*invr2;                      // invr = 3/r^4
+                invr = 3.0*invr*invr;                       // invr = 3/r^4
                 float q1 = (xx*x + xy*y + xz*z)*invr;
                 float q2 = (xy*x + yy*y + yz*z)*invr;
                 float q3 = (xz*x + yz*y + zz*z)*invr;
@@ -465,7 +467,7 @@ void Octree::integrate(float dt)
                 ay -= q2;
                 az -= q3;
 
-                invr = 5.0/2.0*invr * (q1*x + q2*y + q3*z); // invr = 15/2 * n.Q.n/r^4
+                invr = 5.0/2.0 * (q1*x + q2*y + q3*z);      // invr = 15/2 * n.Q.n/r^4
                 ax += x*invr;
                 ay += y*invr;
                 az += z*invr;
@@ -484,22 +486,8 @@ void Octree::integrate(float dt)
             v[id+1] = vy;
             v[id+2] = vz;
         }
-        
-        // // store pos & vel back in arrays
-        // for(int j = 0; j < (int)idx.size(); j++)
-        // {
-        //     int id = idx[j];
-        //     pos[id] = p[4*j];
-        //     pos[id+1] = p[4*j+1];
-        //     pos[id+2] = p[4*j+2];
-        //     vel[id] = v[4*j];
-        //     vel[id+1] = v[4*j+1];
-        //     vel[id+2] = v[4*j+2];
-        // }
-        // #pragma acc wait
     }
-    float* p = pos;
-    float* v = vel;
+    // #pragma acc wait
     #pragma acc exit data copyout(p[0:4*N], v[0:4*N])
 
     steady_clock::time_point t2 = steady_clock::now();
