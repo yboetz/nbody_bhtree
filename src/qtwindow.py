@@ -27,8 +27,6 @@ class NBodyWidget(gl.GLViewWidget):
 
         # Timestep
         self.dt = np.float32(.005)
-        # Softening length. CANNOT be zero or program will crash
-        self.e = np.float32(.05)
         # Opening angle
         self.theta = np.float32(1.5)
         # Max number of bodies per critical cell
@@ -335,7 +333,7 @@ class NBodyWidget(gl.GLViewWidget):
             print(e)
             print('Read error. Data should be aligned as \'m x y z vx vy vz\'.')
         else:
-            self.oct = Octree(self.pos, self.vel, self.n, self.Ncrit, self.theta, self.e)
+            self.oct = Octree(self.pos, self.vel, self.n, self.Ncrit, self.theta)
             self.resetColors()
             self.setupRecording("del")
             self.setSize(self.size)

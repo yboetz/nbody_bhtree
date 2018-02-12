@@ -20,12 +20,11 @@ class Octree
         float* pos;                                         // pointer to array containing positions (x, y, z, m)
         float* vel;                                         // pointer to array containing velocities (vx, vy, vz, 0)
         float theta;                                        // opening angle
-        float eps;                                          // softening length
         double T;                                           // time passed in system (not physical units)
 
         double T_insert, T_accel, T_walk;                   // variables for time measurements
 
-        Octree(float*, float*, int, int, float, float);
+        Octree(float*, float*, int, int, float);
         ~Octree();
         Cell* makeCell(__m128);
         void makeRoot();

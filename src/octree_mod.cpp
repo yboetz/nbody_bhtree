@@ -1,5 +1,6 @@
 #include <iostream>
 #include <vector>
+#include <math.h>
 #include <x86intrin.h>
 #include <omp.h>
 #include "octree_mod.h"
@@ -15,9 +16,10 @@ using namespace std::chrono;
 const int SIZEOF_COM = sizeof(__m128) / sizeof(float);      // sizeof com vector in floats
 const int SIZEOF_MOM = sizeof(moment) / sizeof(float);      // sizeof moment struct in floats
 const int SIZEOF_TOT = SIZEOF_COM + SIZEOF_MOM;
+const float EPS = 0.05;
 
 // Constructor. Sets position, velocity, number of bodies, opening angle and softening length. Initializes Cell & Leaf vectors
-Octree::Octree(float* p, float* v, int n,  int ncrit, float th, float e)
+Octree::Octree(float* p, float* v, int n,  int ncrit, float th)
     {
     pos = p;
     vel = v;
@@ -25,7 +27,6 @@ Octree::Octree(float* p, float* v, int n,  int ncrit, float th, float e)
     numCell = 0;
     Ncrit = ncrit;
     theta = th;
-    eps = e;
     listCapacity = 0;
     T = 0;
 
@@ -211,7 +212,7 @@ void Octree::getBoxSize()
 float Octree::energy()
     {
     const __m128 ZERO = _mm_set1_ps(0.0f);
-    __m256 epsv = _mm256_set1_ps(eps);
+    __m256 epsv = _mm256_set1_ps(EPS);
     float V = 0;                                                    // total potential energy
     float T = 0;                                                    // total kinetic energy
     
@@ -335,18 +336,15 @@ void Octree::integrate(float dt)
     {
     steady_clock::time_point t1 = steady_clock::now();
 
-    __m128 dtv = _mm_setr_ps(dt, dt, dt, 0.0f);
-    __m256 epsv = _mm256_set1_ps(eps);
-    
-    #pragma omp parallel
-    {
     // in parallel region initialice temporary interaction lists for each thread
+    std::vector<float> idx (N/Ncrit);
     std::vector<float> int_cells (listCapacity);
     std::vector<float> int_leaves (4*Ncrit);
     
-    #pragma omp for schedule(dynamic)
+    // #pragma omp for schedule(dynamic)
     for(int i = 0; i < (int)critCells.size(); i++)                  // loop over all critical cells
-        {
+    {
+        idx.resize(0);
         int_cells.resize(0);
         int_leaves.resize(0);
         Cell* critCell = (Cell*)critCells[i];
@@ -364,7 +362,7 @@ void Octree::integrate(float dt)
             }
             // if critCell == leaf we have to calculate cdist using com instead of midp
             else if((critCell->type == 0 && ((_node->midp[3])/theta + _node->delta) < cdist(critCell->midp, _node->com)) ||
-                    (critCell->type == 1 && ((_node->midp[3])/theta + _node->delta) < cdist(_mm_blend_ps(critCell->com, dtv, 0b1000), _node->com)))
+                    (critCell->type == 1 && ((_node->midp[3])/theta + _node->delta) < cdist(_mm_blend_ps(critCell->com, _mm_set1_ps(0.0f), 0b1000), _node->com)))
             {
                 int_cells.insert(int_cells.end(), begin_com, begin_com + SIZEOF_COM);   // append center of mass vector
                 int_cells.insert(int_cells.end(), begin_mom, begin_mom + SIZEOF_MOM);   // append moment tensor struct
@@ -373,56 +371,137 @@ void Octree::integrate(float dt)
             else node = _node->more;   
         }
         while(node != root);
+        listCapacity = int_cells.capacity();
 
-        // if list are not 2-aligned, add another entry
-        if(int_leaves.size() % (2*SIZEOF_COM) != 0)
-            int_leaves.insert(int_leaves.end(), SIZEOF_COM, 0.0f);
-        if(int_cells.size() % (2*SIZEOF_TOT) != 0)
-            int_cells.insert(int_cells.end(), SIZEOF_TOT, 0.0f);
-
-        // For each leaf in critCell, calculate the acceleration by summing over all bodies in interaction list
+        // append idx, pos & vel of each leaf in critcell to list
         node = critCell;
         Node* end = critCell->next;
         do
-            {
+        {
             if(node->type)
-                {
-                float* cells_ptr = int_cells.data();                // pointer to first element in interaction list (better performance)
-                int idx = 4*(((Leaf*)node)->id);
-                __m128 p = _mm_load_ps(pos + idx);
-                __m128 v = _mm_load_ps(vel + idx);
-                __m128 a = _mm_set1_ps(0.0f);
-                __m256 _p1 = _mm256_set_m128(p, p);
-
-                for(int j = 0; j < (int)int_leaves.size(); j+=2*SIZEOF_COM)
-                {
-                    __m256 _p2 = _mm256_loadu_ps(int_leaves.data() + j);    // read in com of 2 particles
-                    a = _mm_add_ps(a, accel(_p1, _p2, epsv));               // calculate acceleration
-                }
-                for(int j = 0; j < (int)int_cells.size(); j+=2*SIZEOF_TOT)
-                {
-                    __m256 _p2 = _mm256_loadu2_m128(cells_ptr, cells_ptr+SIZEOF_TOT);   // read in com of 2 particles
-                    __m256 _q1 = _mm256_loadu2_m128(cells_ptr+SIZEOF_COM, cells_ptr+SIZEOF_TOT+SIZEOF_COM);     // read in quad. tensor
-                    __m256 _q2 = _mm256_loadu2_m128(cells_ptr+SIZEOF_COM+2, cells_ptr+SIZEOF_TOT+SIZEOF_COM+2); // read in quad. tensor
-                    a = _mm_add_ps(a, accel(_p1, _p2, _q1, _q2, epsv));     // calculate acceleration
-                    cells_ptr += 2*SIZEOF_TOT;                              // increment pointer by 2
-                }
-                // semi-implicit Euler integration
-                v = _mm_fmadd_ps(dtv, a, v);
-                p = _mm_fmadd_ps(dtv, v, p);
-                // store new position & velocity
-                _mm_store_ps(pos + idx, p);
-                _mm_store_ps(vel + idx, v);
-
+            {
+                int id = 4*((Leaf*)node)->id;
+                idx.push_back(id);
+                // _pos.insert(_pos.end(), pos + id, pos + id + 4);
+                // _vel.insert(_vel.end(), vel + id, vel + id + 4);
                 node = node->next;
-                }
-            else node = ((Cell*)node)->more;
             }
-        while(node != end);
+            else node = ((Cell*)node)->more;
         }
-    #pragma omp single
-    listCapacity = int_cells.capacity();
+        while(node != end);
+
+        float* id_ptr = idx.data();
+        float* int_l = int_leaves.data();
+        float* int_c = int_cells.data();
+        float* p = pos;
+        float* v = vel;
+        int idsize = idx.size();
+        int lsize = int_leaves.size();
+        int csize = int_cells.size();
+        // send everything to GPU to calculate interactions
+        #pragma acc enter data present_or_copyin(p[0:4*N], v[0:4*N]), \
+        copyin(int_l[0:lsize], int_c[0:csize], id_ptr[0:idsize])
+        #pragma acc parallel num_gangs(16), num_workers(16), vector_length(32) //, async(i)
+        #pragma acc loop gang
+        for(int j = 0; j < idsize; j++)
+        {
+            int id = id_ptr[j];
+            float ax = 0;
+            float ay = 0;
+            float az = 0;
+            float px = p[id];
+            float py = p[id+1];
+            float pz = p[id+2];
+            float vx = v[id];
+            float vy = v[id+1];
+            float vz = v[id+2];
+
+            #pragma acc loop worker vector
+            for(int k = 0; k < lsize; k+=SIZEOF_COM)
+            {
+                float x = int_l[k] - px;
+                float y = int_l[k+1] - py;
+                float z = int_l[k+2] - pz;
+                float m = int_l[k+3];
+                float invr = x*x + y*y + z*z + EPS*EPS;
+                invr = 1/sqrtf(invr);
+                invr = m*invr*invr*invr;
+                ax += x*invr;
+                ay += y*invr;
+                az += z*invr;
+            }
+
+            #pragma acc loop worker vector
+            for(int k = 0; k < csize; k+=SIZEOF_TOT)
+            {
+                float x = int_c[k] - px;
+                float y = int_c[k+1] - py;
+                float z = int_c[k+2] - pz;
+                float m = int_c[k+3];
+                float xx = int_c[k+SIZEOF_COM];
+                float xy = int_c[k+SIZEOF_COM+1];
+                float xz = int_c[k+SIZEOF_COM+2];
+                float yy = int_c[k+SIZEOF_COM+3];
+                float yz = int_c[k+SIZEOF_COM+4];
+                float zz = int_c[k+SIZEOF_COM+5];
+                float invr = x*x + y*y + z*z + EPS*EPS;     // invr = r^2
+                invr = 1/sqrtf(invr);                       // invr = 1/r
+                float invr2 = invr*invr;                    // invr2 = 1/r^2
+                x *= invr;
+                y *= invr;
+                z *= invr;
+
+                // monopole
+                ax += m*x*invr2;
+                ay += m*y*invr2;
+                az += m*z*invr2;
+
+                // quadrupole
+                invr = 3.0*invr*invr2;                      // invr = 3/r^4
+                float q1 = (xx*x + xy*y + xz*z)*invr;
+                float q2 = (xy*x + yy*y + yz*z)*invr;
+                float q3 = (xz*x + yz*y + zz*z)*invr;
+                ax -= q1;
+                ay -= q2;
+                az -= q3;
+
+                invr = 5.0/2.0*invr * (q1*x + q2*y + q3*z); // invr = 15/2 * n.Q.n/r^4
+                ax += x*invr;
+                ay += y*invr;
+                az += z*invr;
+            }
+
+            vx += dt*ax;
+            vy += dt*ay;
+            vz += dt*az;
+            px += dt*vx;
+            py += dt*vy;
+            pz += dt*vz;
+            p[id] = px;
+            p[id+1] = py;
+            p[id+2] = pz;
+            v[id] = vx;
+            v[id+1] = vy;
+            v[id+2] = vz;
+        }
+        
+        // // store pos & vel back in arrays
+        // for(int j = 0; j < (int)idx.size(); j++)
+        // {
+        //     int id = idx[j];
+        //     pos[id] = p[4*j];
+        //     pos[id+1] = p[4*j+1];
+        //     pos[id+2] = p[4*j+2];
+        //     vel[id] = v[4*j];
+        //     vel[id+1] = v[4*j+1];
+        //     vel[id+2] = v[4*j+2];
+        // }
+        // #pragma acc wait
     }
+    float* p = pos;
+    float* v = vel;
+    #pragma acc exit data copyout(p[0:4*N], v[0:4*N])
+
     steady_clock::time_point t2 = steady_clock::now();
     T_accel += duration_cast<duration<double>>(t2 - t1).count();
     // rebuild tree
