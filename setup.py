@@ -13,8 +13,8 @@ import numpy as np
 extensions = [Extension(name="cython.octree",
                         sources=["cython/octree.pyx"],
                         include_dirs=[np.get_include()],
-                        extra_compile_args=["-std=c++11", "-O3", "-mfma", "-mavx2", "-fopenacc", "-foffload=nvptx-none", "-foffload=-O3", "-foffload=-lm"],
-                        extra_link_args=["-O3", "-lgomp", "-lpthread", "-fopenacc", "-foffload=nvptx-none", "-foffload=-O3", "-foffload=-lm"],
+                        extra_compile_args=["-std=c++11", "-O3", "-mfma", "-mavx2", "-fopenmp", "-lOpenCL"],
+                        extra_link_args=["-O3", "-lgomp", "-lpthread", "-fopenmp", "-lOpenCL"],
                         language="c++")]
 
 setup(ext_modules = cythonize(extensions))

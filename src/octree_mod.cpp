@@ -1,4 +1,5 @@
 #include <iostream>
+#include <chrono>
 #include <vector>
 #include <math.h>
 #include <x86intrin.h>
@@ -8,7 +9,12 @@
 #include "accel.cpp"
 #include "utils.cpp"
 #include "node.cpp"
-#include <chrono>
+#include "context.cpp"
+#ifdef __APPLE__
+    #include <OpenCL/cl.hpp>
+#else
+    #include <CL/cl.hpp>
+#endif
 using namespace std::chrono;
 using namespace std;
 
@@ -40,6 +46,9 @@ Octree::Octree(float* p, float* v, int n,  int ncrit, float th)
     for(int i = 0; i < N; i++) leaves[i] = new Leaf(i);
     // initialize root cell
     root = makeCell(_mm_set1_ps(0.0f));
+
+    // initialize OpenCL context
+    create_context(context, data_queue, compute_queue, euler);
 
     buildTree();
     }
@@ -336,21 +345,24 @@ float Octree::angularMomentum()
 void Octree::integrate(float dt)
     {
     steady_clock::time_point t1 = steady_clock::now();
-    // define pointers to be accessed in openacc
-    float* p = pos;
-    float* v = vel;
-    // send everything to GPU to calculate interactions
-    #pragma acc enter data copyin(p[:4*N], v[:4*N])
 
     // in parallel region initialice temporary interaction lists for each thread
-    vector<float> idx (N/Ncrit);
+    vector<int> idx (Ncrit);
+    vector<float> _pos (4*Ncrit);
+    vector<float> _vel (4*Ncrit);
     vector<float> int_cells (listCapacity);
     vector<float> int_leaves (4*Ncrit);
+
+    cl::Buffer buffer_pos(context, CL_MEM_READ_WRITE, sizeof(float)*4*Ncrit);
+    cl::Buffer buffer_vel(context, CL_MEM_READ_WRITE, sizeof(float)*4*Ncrit);
+    // cl::Buffer buffer_idx(context, CL_MEM_READ_ONLY, sizeof(int)*Ncrit);
     
     // #pragma omp for schedule(dynamic)
     for(int i = 0; i < (int)critCells.size(); i++)                  // loop over all critical cells
     {
         idx.resize(0);
+        _pos.resize(0);
+        _vel.resize(0);
         int_cells.resize(0);
         int_leaves.resize(0);
         Cell* critCell = (Cell*)critCells[i];
@@ -377,11 +389,6 @@ void Octree::integrate(float dt)
             else node = _node->more;   
         }
         while(node != root);
-        // if list are empty, add zero element, else crashes?
-        // if(int_leaves.size() == 0)
-        //     int_leaves.insert(int_leaves.end(), SIZEOF_COM, 0.0f);
-        // if(int_cells.size() == 0)
-        //     int_cells.insert(int_cells.end(), SIZEOF_TOT, 0.0f);
         listCapacity = int_cells.capacity();
 
         // append idx, pos & vel of each leaf in critcell to list
@@ -393,109 +400,50 @@ void Octree::integrate(float dt)
             {
                 int id = 4*((Leaf*)node)->id;
                 idx.push_back(id);
-                // _pos.insert(_pos.end(), pos + id, pos + id + 4);
-                // _vel.insert(_vel.end(), vel + id, vel + id + 4);
+                _pos.insert(_pos.end(), pos + id, pos + id + 4);
+                _vel.insert(_vel.end(), vel + id, vel + id + 4);
                 node = node->next;
             }
             else node = ((Cell*)node)->more;
         }
         while(node != end);
 
-        float* id_ptr = idx.data();
-        float* int_l = int_leaves.data();
-        float* int_c = int_cells.data();
-        int idsize = idx.size();
-        int lsize = int_leaves.size();
-        int csize = int_cells.size();
+        // copy pos & vel to GPU
+        cl::Buffer buffer_leaves(context, CL_MEM_READ_ONLY, sizeof(float)*int_leaves.size());
+        cl::Buffer buffer_cells(context, CL_MEM_READ_ONLY, sizeof(float)*int_cells.size());
+        data_queue.enqueueWriteBuffer(buffer_pos, CL_TRUE, 0, sizeof(float)*_pos.size(), _pos.data());
+        data_queue.enqueueWriteBuffer(buffer_vel, CL_TRUE, 0, sizeof(float)*_vel.size(), _vel.data());
+        data_queue.enqueueWriteBuffer(buffer_leaves, CL_TRUE, 0, sizeof(float)*int_leaves.size(), int_leaves.data());
+        data_queue.enqueueWriteBuffer(buffer_cells, CL_TRUE, 0, sizeof(float)*int_cells.size(), int_cells.data());
+        data_queue.finish();                                        // wait for copy to finish
 
-        #pragma acc data present(p[:4*N], v[:4*N])
-        #pragma acc data copyin(int_l[0:lsize], int_c[0:csize], id_ptr[0:idsize])
-        #pragma acc parallel num_gangs(16), num_workers(16), vector_length(32) //, async(i)
-        #pragma acc loop gang
-        for(int j = 0; j < idsize; j++)
+        // start kernel
+        euler.setArg(0, dt);
+        euler.setArg(1, EPS*EPS);
+        euler.setArg(2, buffer_pos);
+        euler.setArg(3, buffer_vel);
+        euler.setArg(4, buffer_leaves);
+        euler.setArg(5, (int)int_leaves.size()/4);
+        compute_queue.enqueueNDRangeKernel(euler, cl::NullRange, cl::NDRange(_pos.size()/4));//, cl::NDRange(16));
+        compute_queue.finish();
+
+        // read result from GPU
+        data_queue.enqueueReadBuffer(buffer_pos, CL_TRUE, 0, sizeof(float)*_pos.size(), _pos.data());
+        data_queue.enqueueReadBuffer(buffer_vel, CL_TRUE, 0, sizeof(float)*_vel.size(), _vel.data());
+        data_queue.finish();
+
+        // write new positions to array
+        for(int j = 0; j < (int)idx.size(); j++)
         {
-            int id = id_ptr[j];
-            float ax = 0;
-            float ay = 0;
-            float az = 0;
-            float px = p[id];
-            float py = p[id+1];
-            float pz = p[id+2];
-            float vx = v[id];
-            float vy = v[id+1];
-            float vz = v[id+2];
-
-            #pragma acc loop worker vector
-            for(int k = 0; k < lsize; k+=SIZEOF_COM)
-            {
-                float x = int_l[k] - px;
-                float y = int_l[k+1] - py;
-                float z = int_l[k+2] - pz;
-                float m = int_l[k+3];
-                float invr = x*x + y*y + z*z + EPS*EPS;
-                invr = 1/sqrtf(invr);
-                invr = m*invr*invr*invr;
-                ax += x*invr;
-                ay += y*invr;
-                az += z*invr;
-            }
-
-            #pragma acc loop worker vector
-            for(int k = 0; k < csize; k+=SIZEOF_TOT)
-            {
-                float x = int_c[k] - px;
-                float y = int_c[k+1] - py;
-                float z = int_c[k+2] - pz;
-                float m = int_c[k+3];
-                float xx = int_c[k+SIZEOF_COM];
-                float xy = int_c[k+SIZEOF_COM+1];
-                float xz = int_c[k+SIZEOF_COM+2];
-                float yy = int_c[k+SIZEOF_COM+3];
-                float yz = int_c[k+SIZEOF_COM+4];
-                float zz = int_c[k+SIZEOF_COM+5];
-                float invr = x*x + y*y + z*z + EPS*EPS;     // invr = r^2
-                invr = 1/sqrtf(invr);                       // invr = 1/r
-                x *= invr;
-                y *= invr;
-                z *= invr;
-                invr = invr*invr;                           // invr = 1/r^2
-
-                // monopole
-                ax += m*x*invr;
-                ay += m*y*invr;
-                az += m*z*invr;
-
-                // quadrupole
-                invr = 3.0*invr*invr;                       // invr = 3/r^4
-                float q1 = (xx*x + xy*y + xz*z)*invr;
-                float q2 = (xy*x + yy*y + yz*z)*invr;
-                float q3 = (xz*x + yz*y + zz*z)*invr;
-                ax -= q1;
-                ay -= q2;
-                az -= q3;
-
-                invr = 5.0/2.0 * (q1*x + q2*y + q3*z);      // invr = 15/2 * n.Q.n/r^4
-                ax += x*invr;
-                ay += y*invr;
-                az += z*invr;
-            }
-
-            vx += dt*ax;
-            vy += dt*ay;
-            vz += dt*az;
-            px += dt*vx;
-            py += dt*vy;
-            pz += dt*vz;
-            p[id] = px;
-            p[id+1] = py;
-            p[id+2] = pz;
-            v[id] = vx;
-            v[id+1] = vy;
-            v[id+2] = vz;
-        }
-    }
-    // #pragma acc wait
-    #pragma acc exit data copyout(p[0:4*N], v[0:4*N])
+            int id = idx[j];            
+            pos[id] = _pos[4*j];
+            pos[id+1] = _pos[4*j+1];
+            pos[id+2] = _pos[4*j+2];
+            vel[id] = _vel[4*j];
+            vel[id+1] = _vel[4*j+1];
+            vel[id+2] = _vel[4*j+2];
+        } // end for
+    } // end for
 
     steady_clock::time_point t2 = steady_clock::now();
     T_accel += duration_cast<duration<double>>(t2 - t1).count();

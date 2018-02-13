@@ -2,6 +2,11 @@
 #include <x86intrin.h>
 #include "moments.h"
 #include "node.h"
+#ifdef __APPLE__
+    #include <OpenCL/cl.hpp>
+#else
+    #include <CL/cl.hpp>
+#endif
 #ifndef OCTREE_MOD_H
 #define OCTREE_MOD_H
 
@@ -21,6 +26,10 @@ class Octree
         float* vel;                                         // pointer to array containing velocities (vx, vy, vz, 0)
         float theta;                                        // opening angle
         double T;                                           // time passed in system (not physical units)
+        cl::Context context;
+        cl::CommandQueue data_queue;
+        cl::CommandQueue compute_queue;
+        cl::Kernel euler;
 
         double T_insert, T_accel, T_walk;                   // variables for time measurements
 
