@@ -10,6 +10,7 @@
 #include "node.cpp"
 #include <chrono>
 using namespace std::chrono;
+using namespace std;
 
 #pragma GCC diagnostic ignored "-Wignored-attributes"
 
@@ -219,8 +220,8 @@ float Octree::energy()
     #pragma omp parallel reduction(+: T, V)
     {
     // in parallel region initialice temporary interaction lists and energy variables for each thread
-    std::vector<float> int_cells (listCapacity);
-    std::vector<float> int_leaves (4*Ncrit);
+    vector<float> int_cells (listCapacity);
+    vector<float> int_leaves (4*Ncrit);
 
     #pragma omp for schedule(dynamic)
     for(int i = 0; i < (int)critCells.size(); i++)                  // loop over all critical cells
@@ -339,12 +340,12 @@ void Octree::integrate(float dt)
     float* p = pos;
     float* v = vel;
     // send everything to GPU to calculate interactions
-    #pragma acc enter data present_or_copyin(p[0:4*N], v[0:4*N])
+    #pragma acc enter data copyin(p[:4*N], v[:4*N])
 
     // in parallel region initialice temporary interaction lists for each thread
-    std::vector<float> idx (N/Ncrit);
-    std::vector<float> int_cells (listCapacity);
-    std::vector<float> int_leaves (4*Ncrit);
+    vector<float> idx (N/Ncrit);
+    vector<float> int_cells (listCapacity);
+    vector<float> int_leaves (4*Ncrit);
     
     // #pragma omp for schedule(dynamic)
     for(int i = 0; i < (int)critCells.size(); i++)                  // loop over all critical cells
@@ -376,6 +377,11 @@ void Octree::integrate(float dt)
             else node = _node->more;   
         }
         while(node != root);
+        // if list are empty, add zero element, else crashes?
+        // if(int_leaves.size() == 0)
+        //     int_leaves.insert(int_leaves.end(), SIZEOF_COM, 0.0f);
+        // if(int_cells.size() == 0)
+        //     int_cells.insert(int_cells.end(), SIZEOF_TOT, 0.0f);
         listCapacity = int_cells.capacity();
 
         // append idx, pos & vel of each leaf in critcell to list
@@ -402,8 +408,9 @@ void Octree::integrate(float dt)
         int lsize = int_leaves.size();
         int csize = int_cells.size();
 
+        #pragma acc data present(p[:4*N], v[:4*N])
         #pragma acc data copyin(int_l[0:lsize], int_c[0:csize], id_ptr[0:idsize])
-        #pragma acc parallel num_gangs(16), num_workers(32), vector_length(32) //, async(i)
+        #pragma acc parallel num_gangs(16), num_workers(16), vector_length(32) //, async(i)
         #pragma acc loop gang
         for(int j = 0; j < idsize; j++)
         {
