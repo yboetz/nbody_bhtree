@@ -24,6 +24,7 @@ const int SIZEOF_COM = sizeof(__m128) / sizeof(float);      // sizeof com vector
 const int SIZEOF_MOM = sizeof(moment) / sizeof(float);      // sizeof moment struct in floats
 const int SIZEOF_TOT = SIZEOF_COM + SIZEOF_MOM;
 const float EPS = 0.05;
+const int NUM_QUEUES = 3;
 
 // Constructor. Sets position, velocity, number of bodies, opening angle and softening length. Initializes Cell & Leaf vectors
 Octree::Octree(float* p, float* v, int n,  int ncrit, float th)
@@ -48,7 +49,7 @@ Octree::Octree(float* p, float* v, int n,  int ncrit, float th)
     root = makeCell(_mm_set1_ps(0.0f));
 
     // initialize OpenCL context
-    create_context(context, data_queue, compute_queue, euler);
+    create_context(context, queues, NUM_QUEUES, euler);
 
     buildTree();
     }
@@ -350,12 +351,11 @@ void Octree::integrate(float dt)
     vector<int> idx (Ncrit);
     vector<float> _pos (4*Ncrit);
     vector<float> _vel (4*Ncrit);
-    vector<float> int_cells (listCapacity);
-    vector<float> int_leaves (4*Ncrit);
+    vector<float> int_c (listCapacity);
+    vector<float> int_l (4*Ncrit);
 
     cl::Buffer buffer_pos(context, CL_MEM_READ_WRITE, sizeof(float)*4*Ncrit);
     cl::Buffer buffer_vel(context, CL_MEM_READ_WRITE, sizeof(float)*4*Ncrit);
-    // cl::Buffer buffer_idx(context, CL_MEM_READ_ONLY, sizeof(int)*Ncrit);
     
     // #pragma omp for schedule(dynamic)
     for(int i = 0; i < (int)critCells.size(); i++)                  // loop over all critical cells
@@ -363,8 +363,8 @@ void Octree::integrate(float dt)
         idx.resize(0);
         _pos.resize(0);
         _vel.resize(0);
-        int_cells.resize(0);
-        int_leaves.resize(0);
+        int_c.resize(0);
+        int_l.resize(0);
         Cell* critCell = (Cell*)critCells[i];
         // Finds all cells which satisfy opening angle criterion and appends them to interaction list
         Node* node = root;
@@ -375,21 +375,21 @@ void Octree::integrate(float dt)
             const float* begin_mom = (float*)&(((Cell*)node)->mom); // only defined if type of node == cell
             if(node->type)
             {
-                int_leaves.insert(int_leaves.end(), begin_com, begin_com + SIZEOF_COM); // append center of mass vector
+                int_l.insert(int_l.end(), begin_com, begin_com + SIZEOF_COM); // append center of mass vector
                 node = node->next;
             }
             // if critCell == leaf we have to calculate cdist using com instead of midp
             else if((critCell->type == 0 && ((_node->midp[3])/theta + _node->delta) < cdist(critCell->midp, _node->com)) ||
                     (critCell->type == 1 && ((_node->midp[3])/theta + _node->delta) < cdist(_mm_blend_ps(critCell->com, _mm_set1_ps(0.0f), 0b1000), _node->com)))
             {
-                int_cells.insert(int_cells.end(), begin_com, begin_com + SIZEOF_COM);   // append center of mass vector
-                int_cells.insert(int_cells.end(), begin_mom, begin_mom + SIZEOF_MOM);   // append moment tensor struct
+                int_c.insert(int_c.end(), begin_com, begin_com + SIZEOF_COM);   // append center of mass vector
+                int_c.insert(int_c.end(), begin_mom, begin_mom + SIZEOF_MOM);   // append moment tensor struct
                 node = node->next;
             }
             else node = _node->more;   
         }
         while(node != root);
-        listCapacity = int_cells.capacity();
+        listCapacity = int_c.capacity();
 
         // append idx, pos & vel of each leaf in critcell to list
         node = critCell;
@@ -409,28 +409,30 @@ void Octree::integrate(float dt)
         while(node != end);
 
         // copy pos & vel to GPU
-        cl::Buffer buffer_leaves(context, CL_MEM_READ_ONLY, sizeof(float)*int_leaves.size());
-        cl::Buffer buffer_cells(context, CL_MEM_READ_ONLY, sizeof(float)*int_cells.size());
-        data_queue.enqueueWriteBuffer(buffer_pos, CL_TRUE, 0, sizeof(float)*_pos.size(), _pos.data());
-        data_queue.enqueueWriteBuffer(buffer_vel, CL_TRUE, 0, sizeof(float)*_vel.size(), _vel.data());
-        data_queue.enqueueWriteBuffer(buffer_leaves, CL_TRUE, 0, sizeof(float)*int_leaves.size(), int_leaves.data());
-        data_queue.enqueueWriteBuffer(buffer_cells, CL_TRUE, 0, sizeof(float)*int_cells.size(), int_cells.data());
-        data_queue.finish();                                        // wait for copy to finish
+        cl::Buffer buffer_l(context, CL_MEM_READ_ONLY, sizeof(float)*int_l.size());
+        cl::Buffer buffer_c(context, CL_MEM_READ_ONLY, sizeof(float)*int_c.size());
+        queues[0].enqueueWriteBuffer(buffer_pos, CL_TRUE, 0, sizeof(float)*_pos.size(), _pos.data());
+        queues[0].enqueueWriteBuffer(buffer_vel, CL_TRUE, 0, sizeof(float)*_vel.size(), _vel.data());
+        queues[0].enqueueWriteBuffer(buffer_l, CL_TRUE, 0, sizeof(float)*int_l.size(), int_l.data());
+        queues[0].enqueueWriteBuffer(buffer_c, CL_TRUE, 0, sizeof(float)*int_c.size(), int_c.data());
+        queues[0].finish();                                        // wait for copy to finish
 
-        // start kernel
+        // start kernel to sum over leaves & cells
         euler.setArg(0, dt);
         euler.setArg(1, EPS*EPS);
         euler.setArg(2, buffer_pos);
         euler.setArg(3, buffer_vel);
-        euler.setArg(4, buffer_leaves);
-        euler.setArg(5, (int)int_leaves.size()/4);
-        compute_queue.enqueueNDRangeKernel(euler, cl::NullRange, cl::NDRange(_pos.size()/4));//, cl::NDRange(16));
-        compute_queue.finish();
+        euler.setArg(4, buffer_l);
+        euler.setArg(5, (int)int_l.size()/SIZEOF_COM);
+        euler.setArg(6, buffer_c);
+        euler.setArg(7, (int)int_c.size()/SIZEOF_TOT);
+        queues[0].enqueueNDRangeKernel(euler, cl::NullRange, cl::NDRange(_pos.size()/4));//, cl::NDRange(16));
+        queues[0].finish();
 
         // read result from GPU
-        data_queue.enqueueReadBuffer(buffer_pos, CL_TRUE, 0, sizeof(float)*_pos.size(), _pos.data());
-        data_queue.enqueueReadBuffer(buffer_vel, CL_TRUE, 0, sizeof(float)*_vel.size(), _vel.data());
-        data_queue.finish();
+        queues[0].enqueueReadBuffer(buffer_pos, CL_TRUE, 0, sizeof(float)*_pos.size(), _pos.data());
+        queues[0].enqueueReadBuffer(buffer_vel, CL_TRUE, 0, sizeof(float)*_vel.size(), _vel.data());
+        queues[0].finish();
 
         // write new positions to array
         for(int j = 0; j < (int)idx.size(); j++)

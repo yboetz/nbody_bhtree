@@ -27,8 +27,7 @@ class Octree
         float theta;                                        // opening angle
         double T;                                           // time passed in system (not physical units)
         cl::Context context;
-        cl::CommandQueue data_queue;
-        cl::CommandQueue compute_queue;
+        std::vector<cl::CommandQueue> queues;
         cl::Kernel euler;
 
         double T_insert, T_accel, T_walk;                   // variables for time measurements

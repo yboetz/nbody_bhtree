@@ -1,4 +1,5 @@
 #include <iostream>
+#include <vector>
 #ifdef __APPLE__
     #include <OpenCL/cl.hpp>
 #else
@@ -36,8 +37,7 @@ string read_kernel()
     return string(source_str, source_size);
 }
 
-void create_context(cl::Context &context, cl::CommandQueue &data_queue, cl::CommandQueue &compute_queue,
-                    cl::Kernel &euler)
+void create_context(cl::Context &context, vector<cl::CommandQueue> &queues, int num_q, cl::Kernel &euler)
 {
     // get all platforms
     vector<cl::Platform> all_platforms;
@@ -82,11 +82,9 @@ void create_context(cl::Context &context, cl::CommandQueue &data_queue, cl::Comm
     }
 
     // set up queues
-    cl::CommandQueue _data_queue(context, default_device);
-    cl::CommandQueue _compute_queue(context, default_device);
-    data_queue = _data_queue;
-    compute_queue = _compute_queue;
-    // // create kernels
+    for(int i = 0; i < num_q; i++)
+        queues.push_back(cl::CommandQueue(context, default_device));
+    // create kernels
     cl::Kernel _euler = cl::Kernel(program, "euler");
     euler = _euler;
 
