@@ -2,6 +2,7 @@
 #include <chrono>
 #include <vector>
 #include <math.h>
+#include <algorithm>    // std::sort
 #include <x86intrin.h>
 #include <omp.h>
 #include "octree_mod.h"
@@ -20,9 +21,9 @@ using namespace std;
 
 #pragma GCC diagnostic ignored "-Wignored-attributes"
 
-const int SIZEOF_COM = sizeof(__m128) / sizeof(float);      // sizeof com vector in floats
-const int SIZEOF_MOM = sizeof(moment) / sizeof(float);      // sizeof moment struct in floats
-const int SIZEOF_TOT = SIZEOF_COM + SIZEOF_MOM;
+// const int SIZEOF_COM = sizeof(__m128) / sizeof(float);      // sizeof com vector in floats
+// const int SIZEOF_MOM = sizeof(moment) / sizeof(float);      // sizeof moment struct in floats
+// const int SIZEOF_TOT = SIZEOF_COM + SIZEOF_MOM;
 const float EPS = 0.05;                                     // softening length
 const int NUM_QUEUES = 2;                                   // how many queues to use. Must be >=2
 
@@ -206,6 +207,7 @@ void Octree::getCrit()
             }
         }
     while(node != root);
+    sort(critCells.begin(), critCells.end(), compare);
     }
 // Finds boxsize around particles
 void Octree::getBoxSize()
@@ -228,7 +230,6 @@ void Octree::getBoxSize()
 // Calculates energy of system (approximate)
 float Octree::energy()
     {
-    const __m128 ZERO = _mm_set1_ps(0.0f);
     __m256 epsv = _mm256_set1_ps(EPS);
     float V = 0;                                                    // total potential energy
     float T = 0;                                                    // total kinetic energy
@@ -246,37 +247,10 @@ float Octree::energy()
         int_leaves.resize(0);
         Cell* critCell = (Cell*)critCells[i];
         // Finds all cells which satisfy opening angle criterion and appends them to interaction list
-        Node* node = root;
-        do
-        {
-            Cell* _node = (Cell*)node;
-            const float* begin_com = (float*)&(node->com);          // pointer to first element of center of mass
-            const float* begin_mom = (float*)&(((Cell*)node)->mom); // only defined if type of node == cell
-            if(node->type)
-            {
-                int_leaves.insert(int_leaves.end(), begin_com, begin_com + SIZEOF_COM); // append center of mass vector
-                node = node->next;
-            }
-            // if critCell == leaf we have to calculate cdist using com instead of midp
-            else if((critCell->type == 0 && ((_node->midp[3])/theta + _node->delta) < cdist(critCell->midp, _node->com)) ||
-                    (critCell->type == 1 && ((_node->midp[3])/theta + _node->delta) < cdist(_mm_blend_ps(critCell->com, ZERO, 0b1000), _node->com)))
-            {
-                int_cells.insert(int_cells.end(), begin_com, begin_com + SIZEOF_COM);   // append center of mass vector
-                int_cells.insert(int_cells.end(), begin_mom, begin_mom + SIZEOF_MOM);   // append moment tensor struct
-                node = node->next;
-            }
-            else node = _node->more;   
-        }
-        while(node != root);
-
-        // if list are not 2-aligned, add another entry
-        if(int_leaves.size() % (2*SIZEOF_COM) != 0)
-            int_leaves.insert(int_leaves.end(), SIZEOF_COM, 0.0f);
-        if(int_cells.size() % (2*SIZEOF_TOT) != 0)
-            int_cells.insert(int_cells.end(), SIZEOF_TOT, 0.0f);
+        get_int_list(critCell, theta, root, root, int_leaves, int_cells);
 
         // For each leaf in critCell, calculate the energy by summing over all bodies in interaction list
-        node = critCell;
+        Node* node = critCell;
         Node* end = critCell->next;
         do
             {
@@ -354,22 +328,12 @@ void Octree::integrate(float dt)
     steady_clock::time_point t1 = steady_clock::now();
 
     // initialize temporary interaction lists & buffers for each queue
-    vector<vector<int>> idx;
-    vector<vector<float>> int_c;
-    vector<vector<float>> int_l;
-    vector<cl::Buffer> buffer_idx;
-    vector<cl::Buffer> buffer_l;
-    vector<cl::Buffer> buffer_c;
-    buffer_idx.resize(NUM_QUEUES);
-    buffer_l.resize(NUM_QUEUES);
-    buffer_c.resize(NUM_QUEUES);
-
-    for(int i = 0; i < NUM_QUEUES; i++)
-    {
-        idx.push_back(vector<int>());
-        int_l.push_back(vector<float>(4*Ncrit));
-        int_c.push_back(vector<float>(listCapacity));
-    }
+    vector<vector<int>> idx (NUM_QUEUES);
+    vector<vector<float>> int_c (NUM_QUEUES);
+    vector<vector<float>> int_l (NUM_QUEUES);
+    vector<cl::Buffer> buffer_idx (NUM_QUEUES);
+    vector<cl::Buffer> buffer_l (NUM_QUEUES);
+    vector<cl::Buffer> buffer_c (NUM_QUEUES);
 
     for(int i = 0; i < (int)critCells.size()+1; i++)                // loop over all critical cells
     {
@@ -378,48 +342,12 @@ void Octree::integrate(float dt)
 
         if(i < (int)critCells.size())                               // start creating interaction lists immediatly
         {
-            idx[current].resize(0);
-            int_l[current].resize(0);
-            int_c[current].resize(0);
             Cell* critCell = (Cell*)critCells[i];
             // Finds all cells which satisfy opening angle criterion and appends them to interaction list
-            Node* node = root;
-            do
-            {
-                Cell* _node = (Cell*)node;
-                const float* begin_com = (float*)&(node->com);          // pointer to first element of center of mass
-                const float* begin_mom = (float*)&(((Cell*)node)->mom); // only defined if type of node == cell
-                if(node->type)
-                {
-                    int_l[current].insert(int_l[current].end(), begin_com, begin_com + SIZEOF_COM); // append center of mass vector
-                    node = node->next;
-                }
-                // if critCell == leaf we have to calculate cdist using com instead of midp
-                else if((critCell->type == 0 && ((_node->midp[3])/theta + _node->delta) < cdist(critCell->midp, _node->com)) ||
-                        (critCell->type == 1 && ((_node->midp[3])/theta + _node->delta) < cdist(_mm_blend_ps(critCell->com, _mm_set1_ps(0.0f), 0b1000), _node->com)))
-                {
-                    int_c[current].insert(int_c[current].end(), begin_com, begin_com + SIZEOF_COM);   // append center of mass vector
-                    int_c[current].insert(int_c[current].end(), begin_mom, begin_mom + SIZEOF_MOM);   // append moment tensor struct
-                    node = node->next;
-                }
-                else node = _node->more;
-            }
-            while(node != root);
+            get_int_list(critCell, theta, root, root, int_l[current], int_c[current]);
             listCapacity = int_c[current].capacity();
-
-            // append idx in critcell to list
-            node = critCell;
-            Node* end = critCell->next;
-            do
-            {
-                if(node->type)
-                {
-                    idx[current].push_back(((Leaf*)node)->id);
-                    node = node->next;
-                }
-                else node = ((Cell*)node)->more;
-            }
-            while(node != end);
+            // get all leaves in critCell
+            get_leaves_in_cell(critCell, idx[current]);
 
             // create buffers
             buffer_idx[current] = cl::Buffer(context, CL_MEM_READ_ONLY, sizeof(int)*idx[current].size());
