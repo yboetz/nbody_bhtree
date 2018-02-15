@@ -89,17 +89,19 @@ void euler_local(const float dt, const float eps2, __global float* pos0,
     }
 
 __kernel
-void euler(const float dt, const float eps2, __global float* pos, __global float* vel,
+void euler(const float dt, const float eps2, __global float* pos0, __global float* vel0,
+           __global float* pos1, __global float* vel1, __global int* idx,
            __global float* leaves, int n_leaves, __global float* cells, int n_cells)
 {
     const int SIZEOF_TOT = 10;                      // SIZEOF_COM + SIZEOF_MOM
 
     const int gid = get_global_id(0);
+    const int index = idx[gid];
     
     float4 dtv = (float4)(dt, dt, dt, 0);
     
-    float4 p = vload4(gid, pos);
-    float4 v = vload4(gid, vel);
+    float4 p = vload4(index, pos0);
+    float4 v = vload4(index, vel0);
     float4 a = (float4)(0, 0, 0, 0);
     
     for(int j = 0; j < n_leaves; j++)
@@ -114,12 +116,12 @@ void euler(const float dt, const float eps2, __global float* pos, __global float
 
     for(int j = 0; j < n_cells; j++)
     {
-        int idx = SIZEOF_TOT*j;         // SIZEOF_TOT * j
+        int idx_c = SIZEOF_TOT*j;         // SIZEOF_TOT * j
         float m, xx, xy, xz, yy, yz, zz;
-        float4 p2 = (float4)(cells[idx], cells[idx+1], cells[idx+2], cells[idx+3]);
+        float4 p2 = (float4)(cells[idx_c], cells[idx_c+1], cells[idx_c+2], cells[idx_c+3]);
         m = p2.w;
-        xx = cells[idx+4]; xy = cells[idx+5]; xz = cells[idx+6];
-        yy = cells[idx+7]; yz = cells[idx+8]; zz = cells[idx+9];
+        xx = cells[idx_c+4]; xy = cells[idx_c+5]; xz = cells[idx_c+6];
+        yy = cells[idx_c+7]; yz = cells[idx_c+8]; zz = cells[idx_c+9];
 
         float4 d = p2 - p;
         float invr = d.x*d.x + d.y*d.y + d.z*d.z + eps2;
@@ -145,6 +147,6 @@ void euler(const float dt, const float eps2, __global float* pos, __global float
     v += dtv * a;
     p += dtv * v;
 
-    vstore4(p, gid, pos);
-    vstore4(v, gid, vel);
+    vstore4(p, index, pos1);
+    vstore4(v, index, vel1);
 }

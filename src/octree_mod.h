@@ -24,7 +24,12 @@ class Octree
         int Ncrit;                                          // max. number of bodies per critical cell
         float* pos;                                         // pointer to array containing positions (x, y, z, m)
         float* vel;                                         // pointer to array containing velocities (vx, vy, vz, 0)
+        cl::Buffer buffer_p0;                               // buffers on GPU containing positions & velocities
+        cl::Buffer buffer_p1;
+        cl::Buffer buffer_v0;
+        cl::Buffer buffer_v1;
         float theta;                                        // opening angle
+        int step;                                           // current step
         double T;                                           // time passed in system (not physical units)
         cl::Context context;
         std::vector<cl::CommandQueue> queues;
