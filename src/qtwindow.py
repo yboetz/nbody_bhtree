@@ -30,7 +30,7 @@ class NBodyWidget(gl.GLViewWidget):
         # Opening angle
         self.theta = np.float32(1.5)
         # Max number of bodies per critical cell
-        self.Ncrit = 128
+        self.Ncrit = 4096
         # Tickrate. 1000/max framerate
         self.tickRate = 1000./60
         # Number of intermediate update steps before drawing
