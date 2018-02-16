@@ -76,20 +76,87 @@ void get_int_list(Cell* critCell, float theta, Node* start, Node* end, vector<fl
         int_c.insert(int_c.end(), SIZEOF_TOT, 0.0f);
 }
 // get all leafs in critCell
-void get_leaves_in_cell(Cell* critCell, vector<int> &idx)
+void get_leaves_in_cell(Cell* critCell, vector<int> &idx, vector<float> &p, vector<float> &v, float* pos, float* vel)
 {
     idx.resize(0);
-    // append idx in critcell to list
+    p.resize(0);
+    v.resize(0);
+    // append idx, pos & vel of leaves in critcell to list
     Node* node = critCell;
     Node* end = critCell->next;
     do
     {
         if(node->type)
         {
-            idx.push_back(((Leaf*)node)->id);
+            int id = 4*((Leaf*)node)->id;
+            idx.push_back(id);
+            p.insert(p.end(), pos + id, pos + id + SIZEOF_COM);
+            v.insert(v.end(), vel + id, vel + id + SIZEOF_COM);
             node = node->next;
         }
         else node = ((Cell*)node)->more;
     }
     while(node != end);
+}
+// calculate accelerations on GPU
+void accel_GPU(cl::Context context, cl::CommandQueue queue, cl::Program program, vector<float> &pos,
+               vector<float> &vel, vector<float> int_l, vector<float> int_c, float dt, float eps)
+{
+    // create kernel here to be thread safe
+    cl::Kernel euler = cl::Kernel(program, "euler");
+    // create buffers
+    cl::Buffer buffer_p = cl::Buffer(context, CL_MEM_READ_WRITE | CL_MEM_COPY_HOST_PTR, sizeof(float)*pos.size(), pos.data());
+    cl::Buffer buffer_v = cl::Buffer(context, CL_MEM_READ_WRITE | CL_MEM_COPY_HOST_PTR, sizeof(float)*vel.size(), vel.data());
+    cl::Buffer buffer_l = cl::Buffer(context, CL_MEM_READ_ONLY | CL_MEM_COPY_HOST_PTR, sizeof(float)*int_l.size(), int_l.data());
+    cl::Buffer buffer_c = cl::Buffer(context, CL_MEM_READ_ONLY | CL_MEM_COPY_HOST_PTR, sizeof(float)*int_c.size(), int_c.data());
+    // start kernel to sum over leaves & cells
+    euler.setArg(0, dt);
+    euler.setArg(1, eps*eps);
+    euler.setArg(2, buffer_p);
+    euler.setArg(3, buffer_v);
+    euler.setArg(4, buffer_l);
+    euler.setArg(5, (int)int_l.size()/SIZEOF_COM);
+    euler.setArg(6, buffer_c);
+    euler.setArg(7, (int)int_c.size()/SIZEOF_TOT);
+    queue.enqueueNDRangeKernel(euler, cl::NullRange, cl::NDRange(pos.size()/4));//, cl::NDRange(16));
+    queue.finish();
+    // copy data back from GPU to host
+    queue.enqueueReadBuffer(buffer_p, CL_TRUE, 0, sizeof(float)*pos.size(), pos.data());
+    queue.enqueueReadBuffer(buffer_v, CL_TRUE, 0, sizeof(float)*vel.size(), vel.data());
+}
+// calculate accelerations on CPU
+void accel_CPU(vector<float> &pos, vector<float> &vel, vector<float> int_l, vector<float> int_c,
+               float dt, float eps)
+{
+    __m128 dtv = _mm_setr_ps(dt, dt, dt, 0.0f);
+    __m256 epsv = _mm256_set1_ps(eps);
+
+    for(int i = 0; i < (int)pos.size(); i+=4)                       // loop over all leaves in critCell
+    {
+        float* cells_ptr = int_c.data();                            // pointer to first element in interaction list (better performance)
+        __m128 p = _mm_load_ps(pos.data() + i);
+        __m128 v = _mm_load_ps(vel.data() + i);
+        __m128 a = _mm_set1_ps(0.0f);
+        __m256 _p1 = _mm256_set_m128(p, p);
+
+        for(int j = 0; j < (int)int_l.size(); j+=2*SIZEOF_COM)
+        {
+            __m256 _p2 = _mm256_loadu_ps(int_l.data() + j);         // read in com of 2 particles
+            a = _mm_add_ps(a, accel(_p1, _p2, epsv));               // calculate acceleration
+        }
+        for(int j = 0; j < (int)int_c.size(); j+=2*SIZEOF_TOT)
+        {
+            __m256 _p2 = _mm256_loadu2_m128(cells_ptr, cells_ptr+SIZEOF_TOT);   // read in com of 2 particles
+            __m256 _q1 = _mm256_loadu2_m128(cells_ptr+SIZEOF_COM, cells_ptr+SIZEOF_TOT+SIZEOF_COM);     // read in quad. tensor
+            __m256 _q2 = _mm256_loadu2_m128(cells_ptr+SIZEOF_COM+2, cells_ptr+SIZEOF_TOT+SIZEOF_COM+2); // read in quad. tensor
+            a = _mm_add_ps(a, accel(_p1, _p2, _q1, _q2, epsv));     // calculate acceleration
+            cells_ptr += 2*SIZEOF_TOT;                              // increment pointer by 2
+        }
+        // semi-implicit Euler integration
+        v = _mm_fmadd_ps(dtv, a, v);
+        p = _mm_fmadd_ps(dtv, v, p);
+        // store new position & velocity
+        _mm_store_ps(pos.data() + i, p);
+        _mm_store_ps(vel.data() + i, v);
+    }
 }

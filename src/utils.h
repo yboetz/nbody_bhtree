@@ -1,9 +1,15 @@
 #ifndef UTILS_H
 #define UTILS_H
 #include <x86intrin.h>
+#include <vector>
 #include "node.h"
 #include "moments.h"
-#include <vector>
+#include "accel.h"
+#ifdef __APPLE__
+    #include <OpenCL/cl.hpp>
+#else
+    #include <CL/cl.hpp>
+#endif
 
 using namespace std;
 
@@ -26,5 +32,11 @@ inline bool compare(Node* a, Node* b);
 void get_int_list(Cell* critCell, float theta, Node* start, Node* end, vector<float> &int_l, vector<float> &int_c);
 // get all leafs in critCell
 void get_leaves_in_cell(Cell* critCell, vector<int> &idx);
+// calculate accelerations on GPU
+void accel_GPU(cl::Context context, cl::CommandQueue queue, cl::Program program, vector<float> &pos,
+               vector<float> &vel, vector<float> int_l, vector<float> int_c, float dt, float eps);
+// calculate accelerations on CPU
+void accel_CPU(vector<float> &pos, vector<float> &vel, vector<float> int_l, vector<float> int_c,
+               float dt, float eps);
 
 #endif

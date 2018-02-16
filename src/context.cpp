@@ -37,7 +37,7 @@ string read_kernel()
     return string(source_str, source_size);
 }
 
-void create_context(cl::Context &context, vector<cl::CommandQueue> &queues, int num_q, cl::Kernel &euler)
+void create_context(cl::Context &context, cl::CommandQueue &queue, cl::Program &program)
 {
     // get all platforms
     vector<cl::Platform> all_platforms;
@@ -74,41 +74,15 @@ void create_context(cl::Context &context, vector<cl::CommandQueue> &queues, int 
     sources.push_back({kernel_code.c_str(), kernel_code.length()});
 
     // create program and build code
-    cl::Program program(context, sources);
+    program = cl::Program(context, sources);
     if (program.build({default_device}) != CL_SUCCESS)
     {
         cout << "Error building: " << program.getBuildInfo<CL_PROGRAM_BUILD_LOG>(default_device) << "...\n";
         exit(1);
     }
 
-    // set up queues
-    for(int i = 0; i < num_q; i++)
-        queues.push_back(cl::CommandQueue(context, default_device));
+    // set up queue
+    queue = cl::CommandQueue(context, default_device);
     // create kernels
-    cl::Kernel _euler = cl::Kernel(program, "euler");
-    euler = _euler;
-
-    // // allocate space
-    // cl::Buffer buffer_A(context, CL_MEM_READ_WRITE, sizeof(int) * n);
-    // cl::Buffer buffer_B(context, CL_MEM_READ_WRITE, sizeof(int) * n);
-    // cl::Buffer buffer_C(context, CL_MEM_READ_WRITE, sizeof(int) * n);
-
-    // // push write commands to queue
-    // queue.enqueueWriteBuffer(buffer_A, CL_TRUE, 0, sizeof(int)*n, A);
-    // queue.enqueueWriteBuffer(buffer_B, CL_TRUE, 0, sizeof(int)*n, B);
-
-    // // RUN ZE KERNEL
-    // add.setArg(0, buffer_A);
-    // add.setArg(1, buffer_B);
-    // add.setArg(2, buffer_C);
-    // add.setArg(3, n);
-    // add.setArg(4, k);
-    // compute_queue.enqueueNDRangeKernel(add, cl::NullRange,  // kernel, offset
-    //         cl::NDRange(NUM_GLOBAL_WITEMS), // global number of work items
-    //         cl::NDRange(32));               // local number (per group)
-
-    // // read result from GPU to here; including for the sake of timing
-    // queue.enqueueReadBuffer(buffer_C, CL_TRUE, 0, sizeof(int)*n, C);
-    // // wait for everything to finish
-    // queue.finish();
+    // euler = cl::Kernel(program, "euler");
 }

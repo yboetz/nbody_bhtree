@@ -25,7 +25,6 @@ using namespace std;
 // const int SIZEOF_MOM = sizeof(moment) / sizeof(float);      // sizeof moment struct in floats
 // const int SIZEOF_TOT = SIZEOF_COM + SIZEOF_MOM;
 const float EPS = 0.05;                                     // softening length
-const int NUM_QUEUES = 2;                                   // how many queues to use. Must be >=2
 
 // Constructor. Sets position, velocity, number of bodies, opening angle and softening length. Initializes Cell & Leaf vectors
 Octree::Octree(float* p, float* v, int n,  int ncrit, float th)
@@ -51,12 +50,7 @@ Octree::Octree(float* p, float* v, int n,  int ncrit, float th)
     root = makeCell(_mm_set1_ps(0.0f));
 
     // initialize OpenCL context
-    create_context(context, queues, NUM_QUEUES, euler);
-    // copy data to GPU
-    buffer_p0 = cl::Buffer(context, CL_MEM_READ_WRITE | CL_MEM_COPY_HOST_PTR, 4*N*sizeof(float), pos);
-    buffer_v0 = cl::Buffer(context, CL_MEM_READ_WRITE | CL_MEM_COPY_HOST_PTR, 4*N*sizeof(float), vel);
-    buffer_p1 = cl::Buffer(context, CL_MEM_READ_WRITE, 4*N*sizeof(float));
-    buffer_v1 = cl::Buffer(context, CL_MEM_READ_WRITE, 4*N*sizeof(float));
+    create_context(context, queue, program);
 
     buildTree();
     }
@@ -327,81 +321,38 @@ void Octree::integrate(float dt)
     {
     steady_clock::time_point t1 = steady_clock::now();
 
-    // initialize temporary interaction lists & buffers for each queue
-    vector<vector<int>> idx (NUM_QUEUES);
-    vector<vector<float>> int_c (NUM_QUEUES);
-    vector<vector<float>> int_l (NUM_QUEUES);
-    vector<cl::Buffer> buffer_idx (NUM_QUEUES);
-    vector<cl::Buffer> buffer_l (NUM_QUEUES);
-    vector<cl::Buffer> buffer_c (NUM_QUEUES);
-
-    for(int i = 0; i < (int)critCells.size()+1; i++)                // loop over all critical cells
+    #pragma omp parallel firstprivate(queue)
     {
-        int current = i%NUM_QUEUES;
-        int previous1 = (i-1)%NUM_QUEUES;
-
-        if(i < (int)critCells.size())                               // start creating interaction lists immediatly
+        // initialize temporary interaction lists for each thread
+        vector<int> idx;
+        vector<float> _pos;
+        vector<float> _vel;
+        vector<float> int_c;
+        vector<float> int_l;
+        #pragma omp for schedule(dynamic)
+        for(int i = 0; i < (int)critCells.size(); i++)                // loop over all critical cells
         {
             Cell* critCell = (Cell*)critCells[i];
             // Finds all cells which satisfy opening angle criterion and appends them to interaction list
-            get_int_list(critCell, theta, root, root, int_l[current], int_c[current]);
-            listCapacity = int_c[current].capacity();
+            get_int_list(critCell, theta, root, root, int_l, int_c);
+            // listCapacity = int_c.capacity();
             // get all leaves in critCell
-            get_leaves_in_cell(critCell, idx[current]);
+            get_leaves_in_cell(critCell, idx, _pos, _vel, pos, vel);
 
-            // create buffers
-            buffer_idx[current] = cl::Buffer(context, CL_MEM_READ_ONLY, sizeof(int)*idx[current].size());
-            buffer_l[current] = cl::Buffer(context, CL_MEM_READ_ONLY, sizeof(float)*int_l[current].size());
-            buffer_c[current] = cl::Buffer(context, CL_MEM_READ_ONLY, sizeof(float)*int_c[current].size());
-            // copy buffers to GPU
-            queues[current].enqueueWriteBuffer(buffer_idx[current], CL_FALSE, 0, sizeof(int)*idx[current].size(), idx[current].data());
-            queues[current].enqueueWriteBuffer(buffer_l[current], CL_FALSE, 0, sizeof(float)*int_l[current].size(), int_l[current].data());
-            queues[current].enqueueWriteBuffer(buffer_c[current], CL_FALSE, 0, sizeof(float)*int_c[current].size(), int_c[current].data());
-        } // endif
+            if(critCell->type || critCell->n < 128)
+                accel_CPU(_pos, _vel, int_l, int_c, dt, EPS);
+            else
+                accel_GPU(context, queue, program, _pos, _vel, int_l, int_c, dt, EPS);
 
-        if(i > 0 && i < (int)critCells.size()+1)    // start with computation on second round
-        {
-            for(int j = 0; j < NUM_QUEUES; j++)
-                queues[j].finish();
-            // start kernel to sum over leaves & cells
-            euler.setArg(0, dt);
-            euler.setArg(1, EPS*EPS);
-            if(step%2 == 0)                         // even steps
+            // store new pos & vel in arrays
+            for(int j = 0; j < (int)idx.size(); j++)
             {
-                euler.setArg(2, buffer_p0);
-                euler.setArg(3, buffer_v0);
-                euler.setArg(4, buffer_p1);
-                euler.setArg(5, buffer_v1);
-            }
-            else                                    // odd steps
-            {
-                euler.setArg(2, buffer_p1);
-                euler.setArg(3, buffer_v1);
-                euler.setArg(4, buffer_p0);
-                euler.setArg(5, buffer_v0);
-            }
-            euler.setArg(6, buffer_idx[previous1]);
-            euler.setArg(7, buffer_l[previous1]);
-            euler.setArg(8, (int)int_l[previous1].size()/SIZEOF_COM);
-            euler.setArg(9, buffer_c[previous1]);
-            euler.setArg(10, (int)int_c[previous1].size()/SIZEOF_TOT);
-            queues[previous1].enqueueNDRangeKernel(euler, cl::NullRange, cl::NDRange(idx[previous1].size()));//, cl::NDRange(16));
-        } // end if
-    } // end for critCells
-
-    // read result from GPU
-    for(int i = 0; i < NUM_QUEUES; i++)
-        queues[i].finish();
-    if(step%2 == 1)
-    {
-        queues[0].enqueueReadBuffer(buffer_p0, CL_TRUE, 0, 4*N*sizeof(float), pos);
-        queues[0].enqueueReadBuffer(buffer_v0, CL_TRUE, 0, 4*N*sizeof(float), vel);
-    }
-    else
-    {
-        queues[0].enqueueReadBuffer(buffer_p1, CL_TRUE, 0, 4*N*sizeof(float), pos);
-        queues[0].enqueueReadBuffer(buffer_v1, CL_TRUE, 0, 4*N*sizeof(float), vel);
-    }
+                int gid = idx[j]; int lid = 4*j;
+                _mm_store_ps(pos + gid, _mm_load_ps(_pos.data() + lid));
+                _mm_store_ps(vel + gid, _mm_load_ps(_vel.data() + lid));
+            } // end for idx
+        } // end for critCells
+    } // end omp parallel
 
     steady_clock::time_point t2 = steady_clock::now();
     T_accel += duration_cast<duration<double>>(t2 - t1).count();
