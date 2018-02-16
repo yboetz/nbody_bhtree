@@ -2,6 +2,7 @@
 #define UTILS_H
 #include <x86intrin.h>
 #include <vector>
+#include <math.h>
 #include "node.h"
 #include "moments.h"
 #include "accel.h"
@@ -16,6 +17,7 @@ using namespace std;
 const int SIZEOF_COM = sizeof(__m128) / sizeof(float);      // sizeof com vector in floats
 const int SIZEOF_MOM = sizeof(moment) / sizeof(float);      // sizeof moment struct in floats
 const int SIZEOF_TOT = SIZEOF_COM + SIZEOF_MOM;
+const int LOCAL_SIZE = 64;
 
 #define _mm256_set_m128(/* __m128 */ hi, /* __m128 */ lo) _mm256_insertf128_ps(_mm256_castps128_ps256(lo), (hi), 0x1)
 #define _mm256_loadu2_m128(/* float const* */ hiaddr, /* float const* */ loaddr) _mm256_set_m128(_mm_loadu_ps(hiaddr), _mm_loadu_ps(loaddr))
@@ -38,5 +40,11 @@ void accel_GPU(cl::Context context, cl::CommandQueue queue, cl::Program program,
 // calculate accelerations on CPU
 void accel_CPU(vector<float> &pos, vector<float> &vel, vector<float> int_l, vector<float> int_c,
                float dt, float eps);
+// extends vector to have size divisible by local_size
+void extend_vec(vector<float> &vec, int local_size);
+// // find largest divisor of number
+// int divisor(int n);
+// // find gcd of two numbers
+// int gcd(int a, int b);
 
 #endif

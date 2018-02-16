@@ -201,7 +201,6 @@ void Octree::getCrit()
             }
         }
     while(node != root);
-    sort(critCells.begin(), critCells.end(), compare);
     }
 // Finds boxsize around particles
 void Octree::getBoxSize()
@@ -339,7 +338,7 @@ void Octree::integrate(float dt)
             // get all leaves in critCell
             get_leaves_in_cell(critCell, idx, _pos, _vel, pos, vel);
 
-            if(critCell->type || critCell->n < 128)
+            if(critCell->type || critCell->n < 512)
                 accel_CPU(_pos, _vel, int_l, int_c, dt, EPS);
             else
                 accel_GPU(context, queue, program, _pos, _vel, int_l, int_c, dt, EPS);

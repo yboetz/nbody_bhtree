@@ -102,6 +102,10 @@ void get_leaves_in_cell(Cell* critCell, vector<int> &idx, vector<float> &p, vect
 void accel_GPU(cl::Context context, cl::CommandQueue queue, cl::Program program, vector<float> &pos,
                vector<float> &vel, vector<float> int_l, vector<float> int_c, float dt, float eps)
 {
+    const int GLOBAL_SIZE = ((pos.size()/SIZEOF_COM - 1)/LOCAL_SIZE + 1)*LOCAL_SIZE;    // make divisible by LOCAL_SIZE
+    extend_vec(int_l, SIZEOF_COM*LOCAL_SIZE);
+    extend_vec(int_c, SIZEOF_TOT*LOCAL_SIZE);
+    // printf("%d, %d\n", pos.size()/4, GLOBAL_SIZE);
     // create kernel here to be thread safe
     cl::Kernel euler = cl::Kernel(program, "euler");
     // create buffers
@@ -114,11 +118,13 @@ void accel_GPU(cl::Context context, cl::CommandQueue queue, cl::Program program,
     euler.setArg(1, eps*eps);
     euler.setArg(2, buffer_p);
     euler.setArg(3, buffer_v);
-    euler.setArg(4, buffer_l);
-    euler.setArg(5, (int)int_l.size()/SIZEOF_COM);
-    euler.setArg(6, buffer_c);
-    euler.setArg(7, (int)int_c.size()/SIZEOF_TOT);
-    queue.enqueueNDRangeKernel(euler, cl::NullRange, cl::NDRange(pos.size()/4));//, cl::NDRange(16));
+    euler.setArg(4, (int)pos.size()/SIZEOF_COM);
+    euler.setArg(5, buffer_l);
+    euler.setArg(6, (int)int_l.size()/SIZEOF_COM);
+    euler.setArg(7, buffer_c);
+    euler.setArg(8, (int)int_c.size()/SIZEOF_TOT);
+    euler.setArg(9, sizeof(float)*SIZEOF_TOT*LOCAL_SIZE, NULL);
+    queue.enqueueNDRangeKernel(euler, cl::NullRange, cl::NDRange(GLOBAL_SIZE), cl::NDRange(LOCAL_SIZE));
     queue.finish();
     // copy data back from GPU to host
     queue.enqueueReadBuffer(buffer_p, CL_TRUE, 0, sizeof(float)*pos.size(), pos.data());
@@ -160,3 +166,33 @@ void accel_CPU(vector<float> &pos, vector<float> &vel, vector<float> int_l, vect
         _mm_store_ps(vel.data() + i, v);
     }
 }
+// extends vector to have size divisible by local_size
+void extend_vec(vector<float> &vec, int local_size)
+{
+    int size = vec.size();
+    int target = ((size - 1)/local_size + 1) * local_size;
+    int diff = target - size;
+    vec.insert(vec.end(), diff, 0.0f);
+}
+// // find largest divisor of number
+// int divisor(int n)
+// {
+//     if(n%2 == 0)
+//         return n/2;
+//     for(int i = 3; i < (int)sqrt(n); i+=2)
+//         if(n%i == 0)
+//             return n/i;
+//     return 1;
+// }
+// // find gcd of two numbers
+// int gcd(int a, int b)
+// {
+//     int c;
+//     while(b > 0)
+//     {
+//         c = a;
+//         a = b;
+//         b = c%b;
+//     }
+//     return a;
+// }
