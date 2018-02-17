@@ -1,15 +1,6 @@
-#include <iostream>
-#include <vector>
-#ifdef __APPLE__
-    #include <OpenCL/cl.hpp>
-#else
-    #include <CL/cl.hpp>
-#endif
-using namespace std;
+#include "context.h"
 
-#define NUM_GLOBAL_WITEMS 1024              // number of threads
-
-
+// reads in kernel from file
 string read_kernel()
 {
     FILE *fp;
@@ -36,7 +27,7 @@ string read_kernel()
 
     return string(source_str, source_size);
 }
-
+// creates context and queues
 void create_context(cl::Context &context, cl::CommandQueue &queue, cl::Program &program)
 {
     // get all platforms
@@ -63,6 +54,8 @@ void create_context(cl::Context &context, cl::CommandQueue &queue, cl::Program &
     // use device[0] for now
     cl::Device default_device=all_devices[0];
     cout << "Using device: "<<default_device.getInfo<CL_DEVICE_NAME>() << "...\n";
+    // printf("max group size: %d threads\n", (int)default_device.getInfo<CL_DEVICE_MAX_WORK_GROUP_SIZE>());
+    // printf("Local mem size: %d moments\n", (int)default_device.getInfo<CL_DEVICE_LOCAL_MEM_SIZE>()/4/10);
 
     // create context
     cl::Context _context({default_device});
