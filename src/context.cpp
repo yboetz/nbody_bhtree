@@ -58,8 +58,7 @@ void create_context(cl::Context &context, cl::CommandQueue &queue, cl::Program &
     // printf("Local mem size: %d moments\n", (int)default_device.getInfo<CL_DEVICE_LOCAL_MEM_SIZE>()/4/10);
 
     // create context
-    cl::Context _context({default_device});
-    context = _context;
+    context = cl::Context({default_device});
 
     // read in kernel code
     cl::Program::Sources sources;
