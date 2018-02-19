@@ -30,7 +30,7 @@ class NBodyWidget(gl.GLViewWidget):
         # Opening angle
         self.theta = np.float32(1.5)
         # Max number of bodies per critical cell
-        self.Ncrit = 4096
+        self.Ncrit = 8192
         # Tickrate. 1000/max framerate
         self.tickRate = 1000./60
         # Number of intermediate update steps before drawing
@@ -140,11 +140,6 @@ class NBodyWidget(gl.GLViewWidget):
     def updateScatterPlot(self):
         self.sp.setData(pos=self.pos.reshape((self.n, 4))[:,0:3],
                         size=self.sizeArray, color=self.colors)
-
-    # Updates lineplot
-    def updateLinePlot(self):
-        self.oct.updateLineData(self.lineData, self.lineLength)
-        self.lp.setData(pos=self.lineData, color=self.lineColors, antialias=True)
 
     # Setup of GLLinePlotItem
     def setupLinePlot(self):
