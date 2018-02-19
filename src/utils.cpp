@@ -166,6 +166,76 @@ void accel_CPU(vector<float> &pos, vector<float> &vel, vector<float> int_l, vect
         _mm_store_ps(vel.data() + i, v);
     }
 }
+// calculate energy on GPU
+void energy_GPU(cl::Context context, cl::CommandQueue queue, cl::Program program, vector<float> &pos,
+                vector<float> &vel, vector<float> int_l, vector<float> int_c, float eps, float &E)
+{
+    const int GLOBAL_SIZE = ((pos.size()/SIZEOF_COM - 1)/LOCAL_SIZE + 1)*LOCAL_SIZE;    // make divisible by LOCAL_SIZE
+    extend_vec(int_l, SIZEOF_COM*LOCAL_SIZE);
+    extend_vec(int_c, SIZEOF_TOT*LOCAL_SIZE);
+    // create kernel here to be thread safe
+    cl::Kernel euler = cl::Kernel(program, "energy");
+    // create buffers
+    cl::Buffer buffer_E = cl::Buffer(context, CL_MEM_READ_WRITE, sizeof(float)*pos.size()/SIZEOF_COM);
+    cl::Buffer buffer_p = cl::Buffer(context, CL_MEM_READ_WRITE | CL_MEM_COPY_HOST_PTR, sizeof(float)*pos.size(), pos.data());
+    cl::Buffer buffer_v = cl::Buffer(context, CL_MEM_READ_WRITE | CL_MEM_COPY_HOST_PTR, sizeof(float)*vel.size(), vel.data());
+    cl::Buffer buffer_l = cl::Buffer(context, CL_MEM_READ_ONLY | CL_MEM_COPY_HOST_PTR, sizeof(float)*int_l.size(), int_l.data());
+    cl::Buffer buffer_c = cl::Buffer(context, CL_MEM_READ_ONLY | CL_MEM_COPY_HOST_PTR, sizeof(float)*int_c.size(), int_c.data());
+    // start kernel to sum over leaves & cells
+    euler.setArg(0, eps*eps);
+    euler.setArg(1, buffer_E);
+    euler.setArg(2, buffer_p);
+    euler.setArg(3, buffer_v);
+    euler.setArg(4, (int)pos.size()/SIZEOF_COM);
+    euler.setArg(5, buffer_l);
+    euler.setArg(6, (int)int_l.size()/SIZEOF_COM);
+    euler.setArg(7, buffer_c);
+    euler.setArg(8, (int)int_c.size()/SIZEOF_TOT);
+    euler.setArg(9, sizeof(float)*SIZEOF_TOT*LOCAL_SIZE, NULL);
+    queue.enqueueNDRangeKernel(euler, cl::NullRange, cl::NDRange(GLOBAL_SIZE), cl::NDRange(LOCAL_SIZE));
+    queue.finish();
+    // copy data back from GPU to host
+    vector<float> eng (pos.size()/SIZEOF_COM);
+    queue.enqueueReadBuffer(buffer_E, CL_TRUE, 0, sizeof(float)*eng.size(), eng.data());
+    // sum up energy
+    E += accumulate(eng.begin(), eng.end(), 0.0f);
+}
+// calculate energy on CPU
+void energy_CPU(vector<float> &pos, vector<float> &vel, vector<float> int_l, vector<float> int_c,
+                float eps, float &E)
+{
+    float V = 0;
+    float T = 0;
+    __m256 epsv = _mm256_set1_ps(eps);
+
+    for(int i = 0; i < (int)pos.size(); i+=4)                       // loop over all leaves in critCell
+    {
+        float* cells_ptr = int_c.data();                            // pointer to first element in interaction list (better performance)
+        __m128 p = _mm_load_ps(pos.data() + i);
+        __m128 v = _mm_load_ps(vel.data() + i);
+        __m256 _p1 = _mm256_set_m128(p, p);
+        float _V = 0.0f;                                            // is needed to cancel out floating point errors
+
+        for(int j = 0; j < (int)int_l.size(); j+=2*SIZEOF_COM)
+        {
+            __m256 _p2 = _mm256_loadu_ps(int_l.data() + j);    // read in com of 2 particles
+            _V += pot(_p1, _p2, epsv);                           // calculate potential
+        }
+        for(int j = 0; j < (int)int_c.size(); j+=2*SIZEOF_TOT)
+        {
+            __m256 _p2 = _mm256_loadu2_m128(cells_ptr, cells_ptr+SIZEOF_TOT);   // read in com of 2 particles
+            __m256 _q1 = _mm256_loadu2_m128(cells_ptr+SIZEOF_COM, cells_ptr+SIZEOF_TOT+SIZEOF_COM);     // read in quad. tensor
+            __m256 _q2 = _mm256_loadu2_m128(cells_ptr+SIZEOF_COM+2, cells_ptr+SIZEOF_TOT+SIZEOF_COM+2); // read in quad. tensor
+            _V += pot(_p1, _p2, _q1, _q2, epsv);         // calculate potential
+            cells_ptr += 2*SIZEOF_TOT;                      // increment pointer by 2
+        }
+        V += _V;
+        // calculate kinetic energy
+        v = _mm_dp_ps(v, v, 0b01111111);
+        T += p[3] * v[0];
+    }
+    E += 0.5f * (T - V);
+}
 // extends vector to have size divisible by local_size
 void extend_vec(vector<float> &vec, int local_size)
 {

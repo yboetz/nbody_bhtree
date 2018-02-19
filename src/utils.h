@@ -3,6 +3,7 @@
 #include <x86intrin.h>
 #include <vector>
 #include <math.h>
+#include <numeric>
 #include "node.h"
 #include "moments.h"
 #include "accel.h"
@@ -40,6 +41,12 @@ void accel_GPU(cl::Context context, cl::CommandQueue queue, cl::Program program,
 // calculate accelerations on CPU
 void accel_CPU(vector<float> &pos, vector<float> &vel, vector<float> int_l, vector<float> int_c,
                float dt, float eps);
+// calculate energy on GPU
+void energy_GPU(cl::Context context, cl::CommandQueue queue, cl::Program program, vector<float> &pos,
+                vector<float> &vel, vector<float> int_l, vector<float> int_c, float eps, float &E);
+// calculate energy on CPU
+void energy_CPU(vector<float> &pos, vector<float> &vel, vector<float> int_l, vector<float> int_c,
+                float eps, float &E);
 // extends vector to have size divisible by local_size
 void extend_vec(vector<float> &vec, int local_size);
 // // find largest divisor of number

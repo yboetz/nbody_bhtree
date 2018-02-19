@@ -35,7 +35,6 @@ Octree::Octree(float* p, float* v, int n,  int ncrit, float th)
     numCell = 0;
     Ncrit = ncrit;
     theta = th;
-    listCapacity = 0;
     T = 0;
     step = 0;
 
@@ -223,72 +222,37 @@ void Octree::getBoxSize()
 // Calculates energy of system (approximate)
 float Octree::energy()
     {
-    __m256 epsv = _mm256_set1_ps(EPS);
-    float V = 0;                                                    // total potential energy
-    float T = 0;                                                    // total kinetic energy
+    float E = 0.0;                                                  // total energy
     
-    #pragma omp parallel reduction(+: T, V)
+    #pragma omp parallel firstprivate(queue), reduction(+: E)
     {
-    // in parallel region initialice temporary interaction lists and energy variables for each thread
-    vector<float> int_cells (listCapacity);
-    vector<float> int_leaves (4*Ncrit);
+        // initialize temporary interaction lists for each thread
+        vector<int> idx;
+        vector<float> _pos;
+        vector<float> _vel;
+        vector<float> int_c;
+        vector<float> int_l;
 
-    #pragma omp for schedule(dynamic)
-    for(int i = 0; i < (int)critCells.size(); i++)                  // loop over all critical cells
+        #pragma omp for schedule(dynamic)
+        for(int i = 0; i < (int)critCells.size(); i++)                  // loop over all critical cells
         {
-        int_cells.resize(0);
-        int_leaves.resize(0);
-        Cell* critCell = (Cell*)critCells[i];
-        // Finds all cells which satisfy opening angle criterion and appends them to interaction list
-        get_int_list(critCell, theta, root, root, int_leaves, int_cells);
+            Cell* critCell = (Cell*)critCells[i];
+            // Finds all cells which satisfy opening angle criterion and appends them to interaction list
+            get_int_list(critCell, theta, root, root, int_l, int_c);
+            // get all leaves in critCell
+            get_leaves_in_cell(critCell, idx, _pos, _vel, pos, vel);
 
-        // For each leaf in critCell, calculate the energy by summing over all bodies in interaction list
-        Node* node = critCell;
-        Node* end = critCell->next;
-        do
-            {
-            if(node->type)
-                {
-                float* cells_ptr = int_cells.data();                // pointer to first element in interaction list (better performance)
-                int idx = 4*(((Leaf*)node)->id);
-                __m128 p = _mm_load_ps(pos + idx);
-                __m128 v = _mm_load_ps(vel + idx);
-                __m256 _p1 = _mm256_set_m128(p, p);
-                float _V = 0.0f;                                    // is needed to cancel out floating point errors
-
-                for(int j = 0; j < (int)int_leaves.size(); j+=2*SIZEOF_COM)
-                {
-                    __m256 _p2 = _mm256_loadu_ps(int_leaves.data() + j);    // read in com of 2 particles
-                    _V += pot(_p1, _p2, epsv);                           // calculate potential
-                }
-                for(int j = 0; j < (int)int_cells.size(); j+=2*SIZEOF_TOT)
-                {
-                    __m256 _p2 = _mm256_loadu2_m128(cells_ptr, cells_ptr+SIZEOF_TOT);   // read in com of 2 particles
-                    __m256 _q1 = _mm256_loadu2_m128(cells_ptr+SIZEOF_COM, cells_ptr+SIZEOF_TOT+SIZEOF_COM);     // read in quad. tensor
-                    __m256 _q2 = _mm256_loadu2_m128(cells_ptr+SIZEOF_COM+2, cells_ptr+SIZEOF_TOT+SIZEOF_COM+2); // read in quad. tensor
-                    _V += pot(_p1, _p2, _q1, _q2, epsv);         // calculate potential
-                    cells_ptr += 2*SIZEOF_TOT;                      // increment pointer by 2
-                }
-                V += _V;
-                // calculate kinetic energy
-                v = _mm_dp_ps(v, v, 0b01111111);
-                T += p[3] * v[0];
-
-                node = node->next;
-                }
-            else node = ((Cell*)node)->more;   
-            }
-        while(node != end);
-        }
-    #pragma omp single
-    listCapacity = int_cells.capacity();
-    }
+            if(critCell->type || critCell->n < 512)
+                energy_CPU(_pos, _vel, int_l, int_c, EPS, E);
+            else
+                energy_GPU(context, queue, program, _pos, _vel, int_l, int_c, EPS, E);
+        } // end for
+    } // end parallel
     // subtract kinetic energy of center of mass
     __m128 mv = centreOfMomentum();
     mv = _mm_dp_ps(mv, mv, 0b01111111);
-    T -= (root->com[3]) * mv[0];
-
-    return 0.5f * (T - V);
+    // E -= 0.5f * (root->com[3]) * mv[0];
+    return E;
     }
 // Calculates angular momentum of system (exact)
 float Octree::angularMomentum()
@@ -334,7 +298,6 @@ void Octree::integrate(float dt)
             Cell* critCell = (Cell*)critCells[i];
             // Finds all cells which satisfy opening angle criterion and appends them to interaction list
             get_int_list(critCell, theta, root, root, int_l, int_c);
-            // listCapacity = int_c.capacity();
             // get all leaves in critCell
             get_leaves_in_cell(critCell, idx, _pos, _vel, pos, vel);
 

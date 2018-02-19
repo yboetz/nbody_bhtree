@@ -18,7 +18,6 @@ class Octree
         std::vector<Leaf*> leaves;                          // list of all leaves
         std::vector<Cell*> cells;                           // list of all cells
         std::vector<Node*> critCells;                       // list of all critical cells
-        int listCapacity;                                   // size of temporary interaction lists
         int numCell;                                        // total number of cells
         int N;                                              // total number of bodies
         int Ncrit;                                          // max. number of bodies per critical cell
