@@ -1,14 +1,19 @@
 # README #
 
 This is an n-body simulation using a [Barnes-Hut](http://www.cita.utoronto.ca/~dubinski/treecode/treecode.html)
-tree algorithm. Number crunching code is written in C++, leveraging OpenMP and SSE/AVX instructions
+tree algorithm. Number crunching code is written in C++, leveraging OpenMP, OpenCL and SSE/AVX instructions
 for high performance. This is then called in Python via Cython and visualized using pyqtgraph.
 On an Intel i7-6700K one million particles can be simulated at more than one timestep per second.
 
 
 #### Requirements ####
 
-You need python 3.x with the following packages:
+You will need an installation of OpenCL. For Intel CPUs/GPUs on Ubuntu you can follow this post on
+[askubuntu](https://askubuntu.com/questions/850281/opencl-on-ubuntu-16-04-intel-sandy-bridge-cpu).
+For other distributions and Nvidia or AMD GPUs you can follow Andreas Klöckner's
+[wiki](https://wiki.tiker.net/OpenCLHowTo).
+
+You also need python 3.x with the following packages:
 
     Cython
     numpy
