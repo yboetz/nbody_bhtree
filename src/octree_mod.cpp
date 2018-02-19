@@ -1,30 +1,10 @@
-#include <iostream>
-#include <chrono>
-#include <vector>
-#include <math.h>
-#include <algorithm>    // std::sort
-#include <x86intrin.h>
-#include <omp.h>
 #include "octree_mod.h"
 #include "moments.cpp"
 #include "accel.cpp"
 #include "utils.cpp"
 #include "node.cpp"
 #include "context.cpp"
-#ifdef __APPLE__
-    #include <OpenCL/cl.hpp>
-#else
-    #include <CL/cl.hpp>
-#endif
-using namespace std::chrono;
-using namespace std;
 
-#pragma GCC diagnostic ignored "-Wignored-attributes"
-
-// const int SIZEOF_COM = sizeof(__m128) / sizeof(float);      // sizeof com vector in floats
-// const int SIZEOF_MOM = sizeof(moment) / sizeof(float);      // sizeof moment struct in floats
-// const int SIZEOF_TOT = SIZEOF_COM + SIZEOF_MOM;
-const float EPS = 0.05;                                     // softening length
 
 // Constructor. Sets position, velocity, number of bodies, opening angle and softening length. Initializes Cell & Leaf vectors
 Octree::Octree(float* p, float* v, int n,  int ncrit, float th)
@@ -251,7 +231,8 @@ float Octree::energy()
     // subtract kinetic energy of center of mass
     __m128 mv = centreOfMomentum();
     mv = _mm_dp_ps(mv, mv, 0b01111111);
-    // E -= 0.5f * (root->com[3]) * mv[0];
+    E -= 0.5f * (root->com[3]) * mv[0];
+
     return E;
     }
 // Calculates angular momentum of system (exact)

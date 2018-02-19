@@ -1,5 +1,13 @@
+#ifndef OCTREE_MOD_H
+#define OCTREE_MOD_H
+
+#include <iostream>
+#include <chrono>
 #include <vector>
+#include <math.h>
+#include <algorithm>    // std::sort
 #include <x86intrin.h>
+#include <omp.h>
 #include "moments.h"
 #include "node.h"
 #ifdef __APPLE__
@@ -7,8 +15,17 @@
 #else
     #include <CL/cl.hpp>
 #endif
-#ifndef OCTREE_MOD_H
-#define OCTREE_MOD_H
+
+using namespace std::chrono;
+using namespace std;
+
+#pragma GCC diagnostic ignored "-Wignored-attributes"
+
+const int SIZEOF_COM = sizeof(__m128) / sizeof(float);      // sizeof com vector in floats
+const int SIZEOF_MOM = sizeof(moment) / sizeof(float);      // sizeof moment struct in floats
+const int SIZEOF_TOT = SIZEOF_COM + SIZEOF_MOM;
+const int LOCAL_SIZE = 64;
+const float EPS = 0.05;                                     // softening length
 
 // Octree class
 class Octree

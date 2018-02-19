@@ -1,4 +1,3 @@
-#include <x86intrin.h>
 #include "accel.h"
 
 // Calculates acceleration on p1 by two points in p2

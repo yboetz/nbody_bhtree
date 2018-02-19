@@ -1,4 +1,3 @@
-#include <x86intrin.h>
 #include "node.h"
    
 // Leaf constructor. Sets type & index

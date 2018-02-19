@@ -7,9 +7,8 @@
 #else
     #include <CL/cl.hpp>
 #endif
-using namespace std;
 
-#define NUM_GLOBAL_WITEMS 1024              // number of threads
+using namespace std;
 
 
 // reads in kernel from file

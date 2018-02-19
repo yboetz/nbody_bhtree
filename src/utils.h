@@ -4,6 +4,7 @@
 #include <vector>
 #include <math.h>
 #include <numeric>
+#include "octree_mod.h"
 #include "node.h"
 #include "moments.h"
 #include "accel.h"
@@ -15,10 +16,6 @@
 
 using namespace std;
 
-const int SIZEOF_COM = sizeof(__m128) / sizeof(float);      // sizeof com vector in floats
-const int SIZEOF_MOM = sizeof(moment) / sizeof(float);      // sizeof moment struct in floats
-const int SIZEOF_TOT = SIZEOF_COM + SIZEOF_MOM;
-const int LOCAL_SIZE = 64;
 
 #define _mm256_set_m128(/* __m128 */ hi, /* __m128 */ lo) _mm256_insertf128_ps(_mm256_castps128_ps256(lo), (hi), 0x1)
 #define _mm256_loadu2_m128(/* float const* */ hiaddr, /* float const* */ loaddr) _mm256_set_m128(_mm_loadu_ps(hiaddr), _mm_loadu_ps(loaddr))
