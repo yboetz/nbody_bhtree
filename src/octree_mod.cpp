@@ -1,23 +1,11 @@
-#include <iostream>
-#include <vector>
-#include <x86intrin.h>
-#include <omp.h>
 #include "octree_mod.h"
 #include "moments.cpp"
 #include "accel.cpp"
 #include "utils.cpp"
 #include "node.cpp"
-#include <chrono>
-using namespace std::chrono;
-
-#pragma GCC diagnostic ignored "-Wignored-attributes"
-
-const int SIZEOF_COM = sizeof(__m128) / sizeof(float);      // sizeof com vector in floats
-const int SIZEOF_MOM = sizeof(moment) / sizeof(float);      // sizeof moment struct in floats
-const int SIZEOF_TOT = SIZEOF_COM + SIZEOF_MOM;
 
 // Constructor. Sets position, velocity, number of bodies, opening angle and softening length. Initializes Cell & Leaf vectors
-Octree::Octree(float* p, float* v, int n,  int ncrit, float th, float e)
+Octree::Octree(float* p, float* v, int n,  int ncrit, float th)
     {
     pos = p;
     vel = v;
@@ -25,8 +13,6 @@ Octree::Octree(float* p, float* v, int n,  int ncrit, float th, float e)
     numCell = 0;
     Ncrit = ncrit;
     theta = th;
-    eps = e;
-    listCapacity = 0;
     T = 0;
 
     // timing
@@ -210,100 +196,35 @@ void Octree::getBoxSize()
 // Calculates energy of system (approximate)
 float Octree::energy()
     {
-    const __m128 ZERO = _mm_set1_ps(0.0f);
-    __m256 epsv = _mm256_set1_ps(eps);
-    float V = 0;                                                    // total potential energy
-    float T = 0;                                                    // total kinetic energy
-    
-    #pragma omp parallel reduction(+: T, V)
+    float E = 0.0;                                                  // total energy
+
+    #pragma omp parallel reduction(+: E)
     {
-    // in parallel region initialice temporary interaction lists and energy variables for each thread
-    std::vector<float> int_cells (listCapacity);
-    std::vector<float> int_leaves (4*Ncrit);
+        // initialize temporary interaction lists for each thread
+        vector<int> idx;
+        vector<float> _pos;
+        vector<float> _vel;
+        vector<float> int_c;
+        vector<float> int_l;
 
-    #pragma omp for schedule(dynamic)
-    for(int i = 0; i < (int)critCells.size(); i++)                  // loop over all critical cells
+        #pragma omp for schedule(dynamic)
+        for(int i = 0; i < (int)critCells.size(); i++)                  // loop over all critical cells
         {
-        int_cells.resize(0);
-        int_leaves.resize(0);
-        Cell* critCell = (Cell*)critCells[i];
-        // Finds all cells which satisfy opening angle criterion and appends them to interaction list
-        Node* node = root;
-        do
-        {
-            Cell* _node = (Cell*)node;
-            const float* begin_com = (float*)&(node->com);          // pointer to first element of center of mass
-            const float* begin_mom = (float*)&(((Cell*)node)->mom); // only defined if type of node == cell
-            if(node->type)
-            {
-                int_leaves.insert(int_leaves.end(), begin_com, begin_com + SIZEOF_COM); // append center of mass vector
-                node = node->next;
-            }
-            // if critCell == leaf we have to calculate cdist using com instead of midp
-            else if((critCell->type == 0 && ((_node->midp[3])/theta + _node->delta) < cdist(critCell->midp, _node->com)) ||
-                    (critCell->type == 1 && ((_node->midp[3])/theta + _node->delta) < cdist(_mm_blend_ps(critCell->com, ZERO, 0b1000), _node->com)))
-            {
-                int_cells.insert(int_cells.end(), begin_com, begin_com + SIZEOF_COM);   // append center of mass vector
-                int_cells.insert(int_cells.end(), begin_mom, begin_mom + SIZEOF_MOM);   // append moment tensor struct
-                node = node->next;
-            }
-            else node = _node->more;   
-        }
-        while(node != root);
-
-        // if list are not 2-aligned, add another entry
-        if(int_leaves.size() % (2*SIZEOF_COM) != 0)
-            int_leaves.insert(int_leaves.end(), SIZEOF_COM, 0.0f);
-        if(int_cells.size() % (2*SIZEOF_TOT) != 0)
-            int_cells.insert(int_cells.end(), SIZEOF_TOT, 0.0f);
-
-        // For each leaf in critCell, calculate the energy by summing over all bodies in interaction list
-        node = critCell;
-        Node* end = critCell->next;
-        do
-            {
-            if(node->type)
-                {
-                float* cells_ptr = int_cells.data();                // pointer to first element in interaction list (better performance)
-                int idx = 4*(((Leaf*)node)->id);
-                __m128 p = _mm_load_ps(pos + idx);
-                __m128 v = _mm_load_ps(vel + idx);
-                __m256 _p1 = _mm256_set_m128(p, p);
-                float _V = 0.0f;                                    // is needed to cancel out floating point errors
-
-                for(int j = 0; j < (int)int_leaves.size(); j+=2*SIZEOF_COM)
-                {
-                    __m256 _p2 = _mm256_loadu_ps(int_leaves.data() + j);    // read in com of 2 particles
-                    _V += pot(_p1, _p2, epsv);                           // calculate potential
-                }
-                for(int j = 0; j < (int)int_cells.size(); j+=2*SIZEOF_TOT)
-                {
-                    __m256 _p2 = _mm256_loadu2_m128(cells_ptr, cells_ptr+SIZEOF_TOT);   // read in com of 2 particles
-                    __m256 _q1 = _mm256_loadu2_m128(cells_ptr+SIZEOF_COM, cells_ptr+SIZEOF_TOT+SIZEOF_COM);     // read in quad. tensor
-                    __m256 _q2 = _mm256_loadu2_m128(cells_ptr+SIZEOF_COM+2, cells_ptr+SIZEOF_TOT+SIZEOF_COM+2); // read in quad. tensor
-                    _V += pot(_p1, _p2, _q1, _q2, epsv);         // calculate potential
-                    cells_ptr += 2*SIZEOF_TOT;                      // increment pointer by 2
-                }
-                V += _V;
-                // calculate kinetic energy
-                v = _mm_dp_ps(v, v, 0b01111111);
-                T += p[3] * v[0];
-
-                node = node->next;
-                }
-            else node = ((Cell*)node)->more;   
-            }
-        while(node != end);
-        }
-    #pragma omp single
-    listCapacity = int_cells.capacity();
-    }
+            Cell* critCell = (Cell*)critCells[i];
+            // Finds all cells which satisfy opening angle criterion and appends them to interaction list
+            get_int_list(critCell, theta, root, root, int_l, int_c);
+            // get all leaves in critCell
+            get_leaves_in_cell(critCell, idx, _pos, _vel, pos, vel);
+            // calculate energy
+            energy_CPU(_pos, _vel, int_l, int_c, EPS, E);
+        } // end for
+    } // end parallel
     // subtract kinetic energy of center of mass
     __m128 mv = centreOfMomentum();
     mv = _mm_dp_ps(mv, mv, 0b01111111);
-    T -= (root->com[3]) * mv[0];
+    E -= 0.5f * (root->com[3]) * mv[0];
 
-    return 0.5f * (T - V);
+    return E;
     }
 // Calculates angular momentum of system (exact)
 float Octree::angularMomentum()
@@ -335,94 +256,34 @@ void Octree::integrate(float dt)
     {
     steady_clock::time_point t1 = steady_clock::now();
 
-    __m128 dtv = _mm_setr_ps(dt, dt, dt, 0.0f);
-    __m256 epsv = _mm256_set1_ps(eps);
-    
     #pragma omp parallel
     {
-    // in parallel region initialice temporary interaction lists for each thread
-    std::vector<float> int_cells (listCapacity);
-    std::vector<float> int_leaves (4*Ncrit);
-    
-    #pragma omp for schedule(dynamic)
-    for(int i = 0; i < (int)critCells.size(); i++)                  // loop over all critical cells
+        // initialize temporary interaction lists for each thread
+        vector<int> idx;
+        vector<float> _pos;
+        vector<float> _vel;
+        vector<float> int_c;
+        vector<float> int_l;
+        #pragma omp for schedule(dynamic)
+        for(int i = 0; i < (int)critCells.size(); i++)                // loop over all critical cells
         {
-        int_cells.resize(0);
-        int_leaves.resize(0);
-        Cell* critCell = (Cell*)critCells[i];
-        // Finds all cells which satisfy opening angle criterion and appends them to interaction list
-        Node* node = root;
-        do
-        {
-            Cell* _node = (Cell*)node;
-            const float* begin_com = (float*)&(node->com);          // pointer to first element of center of mass
-            const float* begin_mom = (float*)&(((Cell*)node)->mom); // only defined if type of node == cell
-            if(node->type)
+            Cell* critCell = (Cell*)critCells[i];
+            // Finds all cells which satisfy opening angle criterion and appends them to interaction list
+            get_int_list(critCell, theta, root, root, int_l, int_c);
+            // get all leaves in critCell
+            get_leaves_in_cell(critCell, idx, _pos, _vel, pos, vel);
+            // calculate acceleration
+            accel_CPU(_pos, _vel, int_l, int_c, dt, EPS);
+            // store new pos & vel in arrays
+            for(int j = 0; j < (int)idx.size(); j++)
             {
-                int_leaves.insert(int_leaves.end(), begin_com, begin_com + SIZEOF_COM); // append center of mass vector
-                node = node->next;
-            }
-            // if critCell == leaf we have to calculate cdist using com instead of midp
-            else if((critCell->type == 0 && ((_node->midp[3])/theta + _node->delta) < cdist(critCell->midp, _node->com)) ||
-                    (critCell->type == 1 && ((_node->midp[3])/theta + _node->delta) < cdist(_mm_blend_ps(critCell->com, dtv, 0b1000), _node->com)))
-            {
-                int_cells.insert(int_cells.end(), begin_com, begin_com + SIZEOF_COM);   // append center of mass vector
-                int_cells.insert(int_cells.end(), begin_mom, begin_mom + SIZEOF_MOM);   // append moment tensor struct
-                node = node->next;
-            }
-            else node = _node->more;   
-        }
-        while(node != root);
+                int gid = idx[j]; int lid = 4*j;
+                _mm_store_ps(pos + gid, _mm_load_ps(_pos.data() + lid));
+                _mm_store_ps(vel + gid, _mm_load_ps(_vel.data() + lid));
+            } // end for idx
+        } // end for critCells
+    } // end omp parallel
 
-        // if list are not 2-aligned, add another entry
-        if(int_leaves.size() % (2*SIZEOF_COM) != 0)
-            int_leaves.insert(int_leaves.end(), SIZEOF_COM, 0.0f);
-        if(int_cells.size() % (2*SIZEOF_TOT) != 0)
-            int_cells.insert(int_cells.end(), SIZEOF_TOT, 0.0f);
-
-        // For each leaf in critCell, calculate the acceleration by summing over all bodies in interaction list
-        node = critCell;
-        Node* end = critCell->next;
-        do
-            {
-            if(node->type)
-                {
-                float* cells_ptr = int_cells.data();                // pointer to first element in interaction list (better performance)
-                int idx = 4*(((Leaf*)node)->id);
-                __m128 p = _mm_load_ps(pos + idx);
-                __m128 v = _mm_load_ps(vel + idx);
-                __m128 a = _mm_set1_ps(0.0f);
-                __m256 _p1 = _mm256_set_m128(p, p);
-
-                for(int j = 0; j < (int)int_leaves.size(); j+=2*SIZEOF_COM)
-                {
-                    __m256 _p2 = _mm256_loadu_ps(int_leaves.data() + j);    // read in com of 2 particles
-                    a = _mm_add_ps(a, accel(_p1, _p2, epsv));               // calculate acceleration
-                }
-                for(int j = 0; j < (int)int_cells.size(); j+=2*SIZEOF_TOT)
-                {
-                    __m256 _p2 = _mm256_loadu2_m128(cells_ptr, cells_ptr+SIZEOF_TOT);   // read in com of 2 particles
-                    __m256 _q1 = _mm256_loadu2_m128(cells_ptr+SIZEOF_COM, cells_ptr+SIZEOF_TOT+SIZEOF_COM);     // read in quad. tensor
-                    __m256 _q2 = _mm256_loadu2_m128(cells_ptr+SIZEOF_COM+2, cells_ptr+SIZEOF_TOT+SIZEOF_COM+2); // read in quad. tensor
-                    a = _mm_add_ps(a, accel(_p1, _p2, _q1, _q2, epsv));     // calculate acceleration
-                    cells_ptr += 2*SIZEOF_TOT;                              // increment pointer by 2
-                }
-                // semi-implicit Euler integration
-                v = _mm_fmadd_ps(dtv, a, v);
-                p = _mm_fmadd_ps(dtv, v, p);
-                // store new position & velocity
-                _mm_store_ps(pos + idx, p);
-                _mm_store_ps(vel + idx, v);
-
-                node = node->next;
-                }
-            else node = ((Cell*)node)->more;
-            }
-        while(node != end);
-        }
-    #pragma omp single
-    listCapacity = int_cells.capacity();
-    }
     steady_clock::time_point t2 = steady_clock::now();
     T_accel += duration_cast<duration<double>>(t2 - t1).count();
     // rebuild tree

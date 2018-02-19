@@ -1,4 +1,3 @@
-#include <x86intrin.h>
 #include "moments.h"
 
 // initialize moment to zero
