@@ -108,7 +108,7 @@ inline float pot(__m256 p1, __m256 p2, __m256 q1, __m256 q2, __m256 eps)
     qr = _mm256_dp_ps(qr, r, 0b01111111);                   // qr = n.Q.n
     qr = _mm256_mul_ps(qr, m1);                             // qr = m1 * n.Q.n
     qr = _mm256_mul_ps(qr, _mm256_set1_ps(3.0f/2.0f));      // qr = 3/2 * m2 * n.Q.n
-    V = _mm256_fmadd_ps(qr, invr, V);                       // V += 3/2 * n.Q.n / r^3
+    V = _mm256_fmadd_ps(qr, invr, V);                       // V += 3/2 * m2 * n.Q.n / r^3
 
     V = _mm256_andnot_ps(mask, V);                          // filter out potential if p1 == p2
     V = _mm256_add_ps(V, _mm256_permute2f128_ps(V, V, 1));  // V = lower 128 bits + higher 128 bits
