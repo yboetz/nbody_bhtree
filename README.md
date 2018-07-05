@@ -5,6 +5,8 @@ tree algorithm. Number crunching code is written in C++, leveraging OpenMP and S
 for high performance. This is then called in Python via Cython and visualized using pyqtgraph.
 On an Intel i7-6700K one million particles can be simulated at more than one timestep per second.
 
+![merger](data/milkyway-andromeda.png)
+
 
 #### Requirements ####
 
