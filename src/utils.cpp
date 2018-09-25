@@ -170,33 +170,3 @@ void energy_CPU(vector<float> &pos, vector<float> &vel, vector<float> int_l, vec
     }
     E += 0.5f * (T - V);
 }
-// extends vector to have size divisible by local_size
-void extend_vec(vector<float> &vec, int local_size)
-{
-    int size = vec.size();
-    int target = ((size - 1)/local_size + 1) * local_size;
-    int diff = target - size;
-    vec.insert(vec.end(), diff, 0.0f);
-}
-// // find largest divisor of number
-// int divisor(int n)
-// {
-//     if(n%2 == 0)
-//         return n/2;
-//     for(int i = 3; i < (int)sqrt(n); i+=2)
-//         if(n%i == 0)
-//             return n/i;
-//     return 1;
-// }
-// // find gcd of two numbers
-// int gcd(int a, int b)
-// {
-//     int c;
-//     while(b > 0)
-//     {
-//         c = a;
-//         a = b;
-//         b = c%b;
-//     }
-//     return a;
-// }

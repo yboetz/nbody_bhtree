@@ -33,7 +33,5 @@ void accel_CPU(vector<float> &pos, vector<float> &vel, vector<float> int_l, vect
 // calculate energy on CPU
 void energy_CPU(vector<float> &pos, vector<float> &vel, vector<float> int_l, vector<float> int_c,
                 float eps, float &E);
-// extends vector to have size divisible by local_size
-void extend_vec(vector<float> &vec, int local_size);
 
 #endif
