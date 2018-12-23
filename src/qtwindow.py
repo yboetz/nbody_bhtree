@@ -565,6 +565,7 @@ class Window(QtGui.QWidget):
         numWidget = QtGui.QLineEdit(self)
         numWidget.setText(str(self.GLWidget.n))
         numWidget.editingFinished.connect(lambda: self.GLWidget.changeNum(numWidget.text()))
+        numWidget.editingFinished.connect(lambda: numWidget.setText(str(self.GLWidget.n)))
         numWidgetLabel = QtGui.QLabel('Max. number of bodies:', self)
         # Labels for controls
         controlLabel = QtGui.QLabel('Controls:\nS\tStart/stop\nE\tPrint energy\n'
