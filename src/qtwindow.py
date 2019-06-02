@@ -103,11 +103,6 @@ class NBodyWidget(gl.GLViewWidget):
             self.addItem(self.lp_oct)
             self.timer.timeout.connect(self.updateOctreePlot)
 
-    # Updates lineplot
-    def updateLinePlot(self):
-        self.oct.updateLineData(self.lineData, self.lineLength)
-        self.lp.setData(pos=self.lineData, color=self.lineColors, antialias=True)
-
     # renderText has to be called inside paintGL
     def paintGL(self, *args, **kwds):
         super().paintGL(*args, **kwds)
