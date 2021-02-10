@@ -1,7 +1,7 @@
 clean:
 	rm -f -r build/
 	rm -f -r src/__pycache__/
-	rm -f cython/octree.cp*
+	rm -f lib/octree.cp*
 
 clean-build:
 	rm -f -r build/

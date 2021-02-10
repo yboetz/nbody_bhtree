@@ -16,7 +16,7 @@ import pyqtgraph.opengl as gl
 from pyqtgraph.Qt import QtCore, QtGui
 from pandas import read_csv
 from utils import centreOfMomentum, centreOfMass
-sys.path.append(os.path.dirname(os.path.abspath(__file__)) + '/../cython')
+sys.path.append(os.path.dirname(os.path.abspath(__file__)) + '/../lib')
 from octree import OTree as Octree
 
 
