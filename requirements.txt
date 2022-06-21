@@ -1,6 +1,6 @@
 Cython==0.29.21
 h5py==3.1.0
-numpy==1.20.1
+numpy==1.22.0
 pandas==1.2.2
 PyOpenGL==3.1.5
 PyOpenGL-accelerate==3.1.5
